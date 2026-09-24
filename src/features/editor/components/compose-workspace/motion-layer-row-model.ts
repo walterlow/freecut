@@ -1,0 +1,196 @@
+import type { TFunction } from 'i18next'
+import type { LucideIcon } from 'lucide-react'
+import {
+  Captions,
+  Crosshair,
+  Image as ImageIcon,
+  Layers,
+  Music,
+  Square,
+  Sticker,
+  Type,
+  Video,
+} from 'lucide-react'
+import type { AnimatableProperty, ItemKeyframes } from '@/types/keyframe'
+import type { TimelineItem, TimelineTrack } from '@/types/timeline'
+import {
+  getAnimatablePropertiesForItem,
+  getProceduralBands,
+} from '@/features/editor/deps/timeline-motion'
+import {
+  getTextMotionTimelineBands,
+  type TextMotionTimelineBand,
+} from '@/shared/timeline/text-motion-timeline'
+import { getVisibleMotionPathProperties } from './motion-path-property-visibility'
+import type { InlineCurveState } from './motion-timeline-primitives'
+import type { RowReorderDragState } from './motion-row-reorder'
+
+export interface LayerEntry {
+  item: TimelineItem
+  track: TimelineTrack | undefined
+}
+
+export type MotionRow =
+  | { kind: 'group'; track: TimelineTrack; items: TimelineItem[] }
+  | { kind: 'layer'; item: TimelineItem; track: TimelineTrack | undefined; depth: number }
+
+export interface LayerParentCandidate extends LayerEntry {
+  layerNumber: number
+}
+
+/** Every layer a row can parent to: anything but itself and the non-rendering types. */
+function getLayerParentCandidates(
+  layerEntries: readonly LayerEntry[],
+  itemId: string,
+): LayerParentCandidate[] {
+  const candidates: LayerParentCandidate[] = []
+  layerEntries.forEach((entry, layerIndex) => {
+    const candidate = entry.item
+    if (candidate.id === itemId) return
+    if (candidate.type === 'audio' || candidate.type === 'adjustment') return
+    candidates.push({ ...entry, layerNumber: layerIndex + 1 })
+  })
+  return candidates
+}
+
+interface LayerPropertyVisibilityInput {
+  properties: readonly AnimatableProperty[]
+  propertyFilter: 'all' | 'keyframed'
+  textMotionBands: readonly TextMotionTimelineBand[]
+  proceduralBands: ReadonlyMap<AnimatableProperty, unknown>
+  itemKeyframes: ItemKeyframes | undefined
+}
+
+function isKeyedOrProceduralProperty(
+  property: AnimatableProperty,
+  input: LayerPropertyVisibilityInput,
+): boolean {
+  if (input.proceduralBands.has(property)) return true
+  const keyed = input.itemKeyframes?.properties.some(
+    (entry) => entry.property === property && entry.keyframes.length > 0,
+  )
+  return keyed === true
+}
+
+/**
+ * Whether the row has anything to expand into: either every property is shown,
+ * or at least one visible property carries keyframes or procedural motion.
+ */
+function hasVisibleLayerChildProperties(input: LayerPropertyVisibilityInput): boolean {
+  if (input.propertyFilter === 'all') return true
+  if (input.textMotionBands.length > 0) return true
+  return input.properties.some((property) => isKeyedOrProceduralProperty(property, input))
+}
+
+const LAYER_TYPE_ICONS: Record<TimelineItem['type'], LucideIcon> = {
+  video: Video,
+  audio: Music,
+  image: ImageIcon,
+  lottie: Sticker,
+  text: Type,
+  shape: Square,
+  adjustment: Layers,
+  controller: Crosshair,
+  composition: Layers,
+  subtitle: Captions,
+}
+
+export interface MotionLayerRowModelInput {
+  item: TimelineItem
+  track: TimelineTrack | undefined
+  layerEntries: readonly LayerEntry[]
+  itemKeyframes: ItemKeyframes | undefined
+  trackById: ReadonlyMap<string, TimelineTrack>
+  expandedLayerIdSet: ReadonlySet<string>
+  selectedItemIdSet: ReadonlySet<string>
+  allPathVertexItemIds: ReadonlySet<string>
+  maskEditingItemId: string | null
+  selectedPathVertexIndices: readonly number[]
+  activeInlineCurve: InlineCurveState | null
+  propertyFilter: 'all' | 'keyframed'
+  rowReorderDrag: RowReorderDragState | null
+  t: TFunction
+}
+
+export interface MotionLayerRowModel {
+  parentItemId: string | undefined
+  parentCandidates: LayerParentCandidate[]
+  expanded: boolean
+  selected: boolean
+  isParentLayerGroupLocked: boolean
+  isLayerLocked: boolean
+  LayerTypeIcon: LucideIcon
+  isPathShape: boolean
+  showAllPathVertices: boolean
+  properties: AnimatableProperty[]
+  textMotionBands: TextMotionTimelineBand[]
+  hasProceduralMotion: boolean
+  hasVisibleChildProperties: boolean
+  isDragging: boolean
+  nullObjectNonRenderingLabel: string | undefined
+}
+
+function getNullObjectNonRenderingLabel(item: TimelineItem, t: TFunction): string | undefined {
+  if (item.type !== 'controller') return undefined
+  return t('editor.compose.nullObjectNonRendering', {
+    defaultValue: 'Null Object (does not render)',
+  })
+}
+
+function resolveParentLayerGroup(
+  track: TimelineTrack | undefined,
+  trackById: ReadonlyMap<string, TimelineTrack>,
+): TimelineTrack | undefined {
+  const parentTrackId = track?.parentTrackId
+  return parentTrackId ? trackById.get(parentTrackId) : undefined
+}
+
+function getRowVisibleProperties(
+  input: MotionLayerRowModelInput,
+  showAllPathVertices: boolean,
+): AnimatableProperty[] {
+  const activeInlineCurve = input.activeInlineCurve
+  const alwaysInclude =
+    activeInlineCurve?.itemId === input.item.id ? activeInlineCurve.property : null
+  return getVisibleMotionPathProperties(getAnimatablePropertiesForItem(input.item), {
+    itemKeyframes: input.itemKeyframes,
+    selectedVertexIndices:
+      input.maskEditingItemId === input.item.id ? input.selectedPathVertexIndices : [],
+    showAllVertices: showAllPathVertices,
+    alwaysInclude,
+  })
+}
+
+export function buildMotionLayerRowModel(input: MotionLayerRowModelInput): MotionLayerRowModel {
+  const { item, track } = input
+  const parentLayerGroup = resolveParentLayerGroup(track, input.trackById)
+  const isParentLayerGroupLocked = parentLayerGroup?.locked === true
+  const showAllPathVertices = input.allPathVertexItemIds.has(item.id)
+  const properties = getRowVisibleProperties(input, showAllPathVertices)
+  const proceduralBands = getProceduralBands(item.motionModifiers, item.durationInFrames, item.from)
+  const textMotionBands = getTextMotionTimelineBands(item)
+
+  return {
+    parentItemId: item.transformParent?.parentItemId,
+    parentCandidates: getLayerParentCandidates(input.layerEntries, item.id),
+    expanded: input.expandedLayerIdSet.has(item.id),
+    selected: input.selectedItemIdSet.has(item.id),
+    isParentLayerGroupLocked,
+    isLayerLocked: track?.locked === true || isParentLayerGroupLocked,
+    LayerTypeIcon: LAYER_TYPE_ICONS[item.type],
+    isPathShape: item.type === 'shape' && item.shapeType === 'path',
+    showAllPathVertices,
+    properties,
+    textMotionBands,
+    hasProceduralMotion: proceduralBands.size > 0 || textMotionBands.length > 0,
+    hasVisibleChildProperties: hasVisibleLayerChildProperties({
+      properties,
+      propertyFilter: input.propertyFilter,
+      textMotionBands,
+      proceduralBands,
+      itemKeyframes: input.itemKeyframes,
+    }),
+    isDragging: input.rowReorderDrag?.sourceTrackId === track?.id,
+    nullObjectNonRenderingLabel: getNullObjectNonRenderingLabel(item, input.t),
+  }
+}

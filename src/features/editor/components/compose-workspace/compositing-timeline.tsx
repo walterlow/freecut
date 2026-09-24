@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { toast } from 'sonner'
 import type { TFunction } from 'i18next'
-import { ChevronDown, ChevronRight, Captions, ClipboardPaste, Blend, Copy, Crop, CopyPlus, Crosshair, EllipsisVertical, Eye, EyeOff, Group, Image as ImageIcon, Layers, Lock, Maximize2, Music, Plus, Pencil, Spline, Square, Sticker, Type, Trash2, Ungroup, Unlock, Video, type LucideIcon } from 'lucide-react'
+import { ChevronDown, ChevronRight, ClipboardPaste, Blend, Copy, Crop, CopyPlus, Crosshair, EllipsisVertical, Eye, EyeOff, Group, Lock, Maximize2, Plus, Pencil, Spline, Square, Type, Trash2, Ungroup, Unlock } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import { useRafDeferredValue } from '@/shared/hooks/use-raf-deferred-value'
 import { PlayheadMarks } from '@/shared/ui/playhead-marks'
@@ -16,13 +16,12 @@ import { createLogger } from '@/shared/logging/logger'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useSelectionStore } from '@/shared/state/selection'
 import { useClipboardStore } from '@/shared/state/clipboard'
-import type { AnimatableProperty, ItemKeyframes, DirectLinkableProperty } from '@/types/keyframe'
+import type { ItemKeyframes, DirectLinkableProperty } from '@/types/keyframe'
 import type { BlendMode } from '@/types/blend-modes'
 import { BLEND_MODE_GROUPS, BLEND_MODE_LABELS } from '@/types/blend-modes'
 import type { TimelineItem, TimelineTrack } from '@/types/timeline'
 import type { CanvasSettings } from '@/types/transform'
-import { getTextMotionTimelineBands } from '@/shared/timeline/text-motion-timeline'
-import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimelineItems, buildDroppedMediaTimelineItems, captureSnapshot, CompactNavigator, getKeyframeNavigatorThumbMetrics, getNiceTickStep, createTimelineTemplateItem, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PickWhipIcon, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, getProceduralBands, getDroppedMediaDurationInFrames, isTimelineTemplateDragData, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setTransformParents, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
+import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimelineItems, buildDroppedMediaTimelineItems, captureSnapshot, CompactNavigator, getKeyframeNavigatorThumbMetrics, getNiceTickStep, createTimelineTemplateItem, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PickWhipIcon, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, getDroppedMediaDurationInFrames, isTimelineTemplateDragData, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setTransformParents, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
 import { clearSpanDragVisuals, clearSpanTrimVisuals, createMotionSpanDragCommands, createMotionSpanTrimCommands, type SpanDragState, type SpanTrimState } from './motion-span-interactions'
 import { createMotionRowReorderCommands, type RowReorderDragState } from './motion-row-reorder'
 import { createMotionTimeViewportController, formatFrameTime, getMotionPlayheadEdgeScrollVelocity, normalizeMotionTimeViewport, panMotionTimeViewport, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
@@ -43,7 +42,7 @@ import { getTransformParentRejection, getTransformParentRejectionMessage } from 
 import { buildMotionSelectionDragState, buildMotionSelectionRetimeUpdates, getMotionSelectionTimeRange } from './motion-keyframe-selection'
 import { MotionIoLane, MOTION_IO_LANE_HEIGHT } from './motion-io-lane'
 import { MotionActiveRegionOverlay, MotionCompEndRulerDim } from './motion-region-overlay'
-import { getVisibleMotionPathProperties } from './motion-path-property-visibility'
+import { buildMotionLayerRowModel, type LayerEntry, type MotionRow } from './motion-layer-row-model'
 
 const LAYER_PARENT_COLUMN_WIDTH = 148
 const LAYER_TIMING_COLUMN_WIDTH = 128
@@ -129,15 +128,6 @@ function resolveMotionInlinePixels(value: string, referenceWidth: number, fallba
 const logger = createLogger('MotionTimeline')
 
 const ALL_BLEND_MODES = BLEND_MODE_GROUPS.flatMap((group) => group.modes)
-
-interface LayerEntry {
-  item: TimelineItem
-  track: TimelineTrack | undefined
-}
-
-type MotionRow =
-  | { kind: 'group'; track: TimelineTrack; items: TimelineItem[] }
-  | { kind: 'layer'; item: TimelineItem; track: TimelineTrack | undefined; depth: number }
 
 
 
@@ -393,37 +383,6 @@ const MotionRowContextMenu = memo(function MotionRowContextMenu({
   )
 })
 
-
-function getItemProperties(item: TimelineItem): AnimatableProperty[] {
-  return getAnimatablePropertiesForItem(item)
-}
-
-function getMotionLayerTypeIcon(itemType: TimelineItem['type']): LucideIcon {
-  switch (itemType) {
-    case 'video':
-      return Video
-    case 'audio':
-      return Music
-    case 'image':
-      return ImageIcon
-    case 'lottie':
-      return Sticker
-    case 'text':
-      return Type
-    case 'shape':
-      return Square
-    case 'adjustment':
-      return Layers
-    case 'controller':
-      return Crosshair
-    case 'composition':
-      return Layers
-    case 'subtitle':
-      return Captions
-    default:
-      return itemType satisfies never
-  }
-}
 
 
 
@@ -1192,7 +1151,7 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
   const isActiveCurveLocked =
     activeCurveTrack?.locked === true || activeCurveParentGroup?.locked === true
   const activeCurveProperties = useMemo(
-    () => (activeCurveItem ? getItemProperties(activeCurveItem) : []),
+    () => (activeCurveItem ? getAnimatablePropertiesForItem(activeCurveItem) : []),
     [activeCurveItem],
   )
   const canGroupSelectedLayers = useMemo(
@@ -2532,59 +2491,38 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
               motionRows.map((row, index) => {
                 if (row.kind === 'group') return renderGroupRow(row)
                 const { item, track, depth } = row
-                const parentItemId = item.transformParent?.parentItemId
-                const parentCandidates = layerEntries.flatMap((entry, layerIndex) => {
-                  const candidate = entry.item
-                  const isEligible =
-                    candidate.id !== item.id &&
-                    candidate.type !== 'audio' &&
-                    candidate.type !== 'adjustment'
-                  return isEligible ? [{ ...entry, layerNumber: layerIndex + 1 }] : []
-                })
-                const expanded = expandedLayerIdSet.has(item.id)
-                const selected = selectedItemIdSet.has(item.id)
-                const parentLayerGroup = track?.parentTrackId
-                  ? trackById.get(track.parentTrackId)
-                  : undefined
-                const isParentLayerGroupLocked = parentLayerGroup?.locked === true
-                const isLayerLocked = track?.locked === true || isParentLayerGroupLocked
-                const nullObjectNonRenderingLabel =
-                  item.type === 'controller'
-                    ? t('editor.compose.nullObjectNonRendering', {
-                        defaultValue: 'Null Object (does not render)',
-                      })
-                    : undefined
-                const MotionLayerTypeIcon = getMotionLayerTypeIcon(item.type)
-                const allProperties = getItemProperties(item)
-                const isPathShape = item.type === 'shape' && item.shapeType === 'path'
-                const showAllPathVertices = allPathVertexItemIds.has(item.id)
-                const properties = getVisibleMotionPathProperties(allProperties, {
+                const {
+                  parentItemId,
+                  parentCandidates,
+                  expanded,
+                  selected,
+                  isParentLayerGroupLocked,
+                  isLayerLocked,
+                  LayerTypeIcon: MotionLayerTypeIcon,
+                  isPathShape,
+                  showAllPathVertices,
+                  properties,
+                  textMotionBands,
+                  hasProceduralMotion,
+                  hasVisibleChildProperties,
+                  isDragging,
+                  nullObjectNonRenderingLabel,
+                } = buildMotionLayerRowModel({
+                  item,
+                  track,
+                  layerEntries,
                   itemKeyframes: keyframesByItemId[item.id],
-                  selectedVertexIndices:
-                    maskEditingItemId === item.id ? selectedPathVertexIndices : [],
-                  showAllVertices: showAllPathVertices,
-                  alwaysInclude:
-                    activeInlineCurve?.itemId === item.id
-                      ? activeInlineCurve.property
-                      : null,
+                  trackById,
+                  expandedLayerIdSet,
+                  selectedItemIdSet,
+                  allPathVertexItemIds,
+                  maskEditingItemId,
+                  selectedPathVertexIndices,
+                  activeInlineCurve,
+                  propertyFilter,
+                  rowReorderDrag,
+                  t,
                 })
-                const proceduralBands = getProceduralBands(
-                  item.motionModifiers,
-                  item.durationInFrames,
-                  item.from,
-                )
-                const textMotionBands = getTextMotionTimelineBands(item)
-                const hasProceduralMotion = proceduralBands.size > 0 || textMotionBands.length > 0
-                const hasVisibleChildProperties =
-                  propertyFilter === 'all' ||
-                  textMotionBands.length > 0 ||
-                  properties.some(
-                    (property) =>
-                      keyframesByItemId[item.id]?.properties.some(
-                        (entry) => entry.property === property && entry.keyframes.length > 0,
-                      ) || proceduralBands.has(property),
-                  )
-                const isDragging = rowReorderDrag?.sourceTrackId === track?.id
                 return (
                   <div
                     key={item.id}
