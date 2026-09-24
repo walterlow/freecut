@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Progress } from '@/components/ui/progress'
-import { CheckCircle2, AlertCircle, X, Download, Film, Clock, HardDrive } from 'lucide-react'
+import { CheckCircle2, AlertCircle, X, Download, Clock, HardDrive } from 'lucide-react'
 import { toast } from 'sonner'
 import type {
   ExportSettings,
@@ -43,6 +42,7 @@ import {
 import { ExportPreviewPlayer } from './export-preview-player'
 import { ExportDialogHeading } from './export-dialog-heading'
 import { ExportSettingsView } from './export-settings-view'
+import { ExportProgressView } from './export-progress-view'
 import { useBrokenMediaIds, useMediaMetadataById } from '../deps/media-library'
 import { assessSmartCopyEligibility } from '../utils/smart-copy'
 import { resolveVideoBitrate } from '../deps/renderer'
@@ -672,57 +672,15 @@ export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogP
 
         {/* Progress View */}
         {view === 'progress' && (
-          <div className="space-y-4 py-4 overflow-hidden">
-            <div className="space-y-4 min-w-0">
-              <div className="space-y-2 min-w-0">
-                <div className="w-full overflow-hidden">
-                  <Progress value={progress} className="h-2 w-full" />
-                </div>
-                <div className="flex items-center justify-between text-sm gap-2">
-                  <span className="text-muted-foreground truncate">
-                    {status === 'preparing' && (progressMessage ?? t('export.progress.preparing'))}
-                    {status === 'rendering' && t('export.progress.rendering')}
-                    {status === 'encoding' && t('export.progress.encoding')}
-                    {status === 'finalizing' && t('export.progress.finalizing')}
-                  </span>
-                  <span className="font-medium tabular-nums flex-shrink-0">
-                    {Math.round(progress)}%
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-x-6 gap-y-2">
-                {renderedFrames !== undefined && totalFrames !== undefined && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Film className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <span className="text-muted-foreground">
-                      {t('export.progress.framesLabel')}
-                    </span>
-                    <span className="font-medium tabular-nums">
-                      {renderedFrames}/{totalFrames}
-                    </span>
-                  </div>
-                )}
-                {elapsedSeconds > 0 && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <span className="text-muted-foreground">
-                      {t('export.progress.elapsedLabel')}
-                    </span>
-                    <span className="font-medium tabular-nums">{formatTime(elapsedSeconds)}</span>
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-muted-foreground">{t('export.progress.keepTabOpen')}</p>
-            </div>
-
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={cancelExport}>
-                {t('export.progress.cancelExport')}
-              </Button>
-            </div>
-          </div>
+          <ExportProgressView
+            progress={progress}
+            progressMessage={progressMessage}
+            renderedFrames={renderedFrames}
+            totalFrames={totalFrames}
+            status={status}
+            elapsedSeconds={elapsedSeconds}
+            onCancel={cancelExport}
+          />
         )}
 
         {/* Complete View */}

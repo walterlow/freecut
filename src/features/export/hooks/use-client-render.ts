@@ -45,7 +45,7 @@ import { createLogger, createOperationId } from '@/shared/logging/logger'
 
 const log = createLogger('Export')
 
-type ClientRenderStatus =
+export type ClientRenderStatus =
   | 'idle'
   | 'preparing'
   | 'rendering'
