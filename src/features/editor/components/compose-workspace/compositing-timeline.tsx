@@ -21,11 +21,11 @@ import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimeline
 import { clearSpanDragVisuals, clearSpanTrimVisuals, createMotionSpanDragCommands, createMotionSpanTrimCommands, type SpanDragState, type SpanTrimState } from './motion-span-interactions'
 import { createMotionRowReorderCommands, type RowReorderDragState } from './motion-row-reorder'
 import { advanceMotionScrubPan, createMotionTimeViewportController, formatFrameTime, normalizeMotionTimeViewport, resolveMotionScrubFramePaint, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
-import { paintMotionViewportGrids, paintMotionViewportNavigator, paintMotionViewportPlayhead, paintMotionViewportRulerLabels, paintMotionViewportTargets } from './motion-time-viewport-preview'
+import { collectMotionViewportPreviewElements, collectMotionViewportPreviewGrids, collectMotionViewportPreviewNavigator, collectMotionViewportPreviewPlayhead, collectMotionViewportPreviewRulerLabels, paintMotionViewportGrids, paintMotionViewportNavigator, paintMotionViewportPlayhead, paintMotionViewportRulerLabels, paintMotionViewportTargets } from './motion-time-viewport-preview'
 import { createMotionLayerClipboardCommands } from './motion-layer-clipboard'
 import { createMotionLayerSelectionCommands } from './motion-layer-selection'
 import { getVisibleMotionRetimeRange, getRetimeKeyboardDelta, applyMotionSelectionFrameUpdates, restoreMotionSelectionRetimeVisuals, type MotionSelectionRetimeDragState, createMotionSelectionRetimeCommands } from './motion-selection-retime'
-import { LAYER_COLUMN_WIDTH, LAYER_MODE_COLUMN_WIDTH, LAYER_PARENT_COLUMN_WIDTH, LAYER_ROW_HEIGHT, LAYER_TIMING_COLUMN_WIDTH, RULER_DIVISIONS, useSettledMotionFrame, type MotionViewportPreviewElement, type MotionViewportPreviewGrid, type MotionViewportPreviewState, type MotionMiddlePanState, type InlineCurveState, type RenameTarget } from './motion-timeline-primitives'
+import { LAYER_COLUMN_WIDTH, LAYER_MODE_COLUMN_WIDTH, LAYER_PARENT_COLUMN_WIDTH, LAYER_ROW_HEIGHT, LAYER_TIMING_COLUMN_WIDTH, RULER_DIVISIONS, useSettledMotionFrame, type MotionViewportPreviewState, type MotionMiddlePanState, type InlineCurveState, type RenameTarget } from './motion-timeline-primitives'
 import { useGizmoStore, useMaskEditorStore } from '@/features/editor/deps/preview'
 import { getLinkedAudioCompanion } from '@/shared/utils/linked-media'
 import { trimCompositionToActiveRegion, useMarkersStore } from '@/features/editor/deps/timeline-store'
@@ -73,13 +73,6 @@ function createGeneratedLayerItem(
 }
 const EMPTY_LAYER_IDS: string[] = []
 
-
-
-function resolveMotionInlinePixels(value: string, referenceWidth: number, fallback: number) {
-  const parsed = Number.parseFloat(value)
-  if (!Number.isFinite(parsed)) return fallback
-  return value.trim().endsWith('%') ? (parsed / 100) * referenceWidth : parsed
-}
 
 
 const logger = createLogger('MotionTimeline')
@@ -700,127 +693,20 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
 
     const baseViewport = timeViewportRef.current
     const baseRange = Math.max(1, baseViewport.endFrame - baseViewport.startFrame)
-    const grids: MotionViewportPreviewGrid[] = []
-    for (const element of root.querySelectorAll<HTMLElement>('[data-motion-grid-frames]')) {
-      const surface = element.closest<HTMLElement>('[data-motion-viewport-surface]')
-      const surfaceWidth = Math.max(
-        0,
-        Number(surface?.dataset.motionViewportAxisWidth) || surface?.clientWidth || 0,
-      )
-      if (surfaceWidth <= 0) continue
-      const edgeInset = Math.max(0, Number(surface?.dataset.motionViewportEdgeInset ?? 0))
-      const usableWidth = Math.max(1, surfaceWidth - edgeInset * 2)
-      const frames = (element.dataset.motionGridFrames ?? '')
-        .split(',')
-        .map(Number)
-        .filter(Number.isFinite)
-      if (frames.length === 0) continue
-      grids.push({
-        element,
-        edgeInset,
-        usableWidth,
-        frames,
-        framesAttribute: element.dataset.motionGridFrames ?? '',
-        cssText: element.style.cssText,
-        willChange: element.style.willChange,
-      })
-    }
-    const elements: MotionViewportPreviewElement[] = []
-    for (const surface of root.querySelectorAll<HTMLElement>('[data-motion-viewport-surface]')) {
-      const surfaceWidth = Math.max(
-        0,
-        Number(surface.dataset.motionViewportAxisWidth) || surface.clientWidth,
-      )
-      if (surfaceWidth <= 0 || surface.hasAttribute('data-motion-ruler-surface')) continue
-      const edgeInset = Math.max(0, Number(surface.dataset.motionViewportEdgeInset ?? 0))
-      const usableWidth = Math.max(1, surfaceWidth - edgeInset * 2)
-      for (const element of surface.querySelectorAll<HTMLElement>('*')) {
-        if (
-          element.closest<HTMLElement>('[data-motion-viewport-surface]') !== surface ||
-          element.hasAttribute('data-motion-static-x') ||
-          element.hasAttribute('data-motion-grid-frames') ||
-          element.style.left === ''
-        ) {
-          continue
-        }
-        const hasInlineWidth = element.style.width !== ''
-        const leftPx = resolveMotionInlinePixels(
-          element.style.left,
-          surfaceWidth,
-          element.offsetLeft,
-        )
-        const widthPx = hasInlineWidth
-          ? resolveMotionInlinePixels(element.style.width, surfaceWidth, element.offsetWidth)
-          : 0
-        const semanticRangeFromFrame = Number(element.dataset.fromFrame)
-        const semanticPointFrame = Number(element.dataset.dopesheetFrame)
-        const semanticFromFrame = Number.isFinite(semanticRangeFromFrame)
-          ? semanticRangeFromFrame
-          : semanticPointFrame
-        const semanticToFrame = Number(element.dataset.toFrame)
-        const hasSemanticFromFrame = Number.isFinite(semanticFromFrame)
-        const hasSemanticToFrame = Number.isFinite(semanticToFrame)
-        elements.push({
-          element,
-          edgeInset,
-          usableWidth,
-          frame: hasSemanticFromFrame
-            ? semanticFromFrame
-            : baseViewport.startFrame + ((leftPx - edgeInset) / usableWidth) * baseRange,
-          frameSpan: hasInlineWidth
-            ? hasSemanticFromFrame && hasSemanticToFrame
-              ? semanticToFrame - semanticFromFrame
-              : (widthPx / usableWidth) * baseRange
-            : null,
-          clampToSurface: element.hasAttribute('data-motion-viewport-clamp'),
-          left: element.style.left,
-          width: element.style.width,
-          willChange: element.style.willChange,
-        })
-        element.style.willChange = hasInlineWidth ? 'left, width' : 'left'
-      }
-    }
-    const playheadElement = root.querySelector<HTMLElement>('[data-testid="motion-playhead"]')
-    const playheadWidth = playheadElement?.parentElement?.clientWidth ?? 0
-    const rulerLabels = Array.from(
-      root.querySelectorAll<HTMLElement>('[data-motion-ruler-label-index]'),
-      (element) => ({
-        element,
-        index: Number(element.dataset.motionRulerLabelIndex ?? 0),
-        text: element.textContent ?? '',
-      }),
+    const grids = collectMotionViewportPreviewGrids(root)
+    const elements = collectMotionViewportPreviewElements({ root, baseViewport, baseRange })
+    const playhead = collectMotionViewportPreviewPlayhead(
+      root.querySelector<HTMLElement>('[data-testid="motion-playhead"]'),
     )
-    const navigatorElement = motionTimeNavigatorRef.current
-    const navigatorThumb = navigatorElement?.querySelector<HTMLElement>(
-      '[data-testid="keyframe-navigator-thumb"]',
-    )
-    const navigatorTrackWidth = navigatorThumb?.parentElement?.clientWidth ?? 0
+    const rulerLabels = collectMotionViewportPreviewRulerLabels(root)
+    const navigator = collectMotionViewportPreviewNavigator(motionTimeNavigatorRef.current)
     motionViewportPreviewRef.current = {
       baseViewport,
       elements,
       grids,
-      playhead:
-        playheadElement && playheadWidth > 0
-          ? {
-              element: playheadElement,
-              width: playheadWidth,
-              transform: playheadElement.style.transform,
-              hidden: playheadElement.hidden,
-            }
-          : null,
+      playhead,
       rulerLabels,
-      navigator:
-        navigatorElement && navigatorThumb
-          ? {
-              element: navigatorElement,
-              startFrame: navigatorElement.dataset.startFrame ?? '',
-              endFrame: navigatorElement.dataset.endFrame ?? '',
-              thumb: navigatorThumb,
-              thumbLeft: navigatorThumb.style.left,
-              thumbWidth: navigatorThumb.style.width,
-              trackWidth: navigatorTrackWidth,
-            }
-          : null,
+      navigator,
     }
   }, [clearMotionTimeViewportPreview])
   const previewMotionTimeViewport = useCallback(
