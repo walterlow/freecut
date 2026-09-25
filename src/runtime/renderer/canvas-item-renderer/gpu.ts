@@ -26,18 +26,16 @@ import { resolveAnimatedTextItem } from '@/runtime/renderer/deps/keyframes-contr
 import type { GpuTexturePool } from '@/infrastructure/gpu-compositor'
 import type { GpuMediaRect, GpuMediaRenderParams } from '@/infrastructure/gpu-media'
 import { MAX_GPU_SHAPE_PATH_VERTICES } from '@/infrastructure/gpu-shapes'
-import { doesMaskAffectTrack } from '@/shared/utils/mask-scope'
 import { isTextMotionActive } from '@/shared/typography/text-motion'
 import { flattenBezierPath } from '@/shared/graphics/shapes/bezier-path'
 import { resolveShapeLinearGradient } from '@/shared/graphics/shapes/linear-gradient'
 import { recordPreviewVideoSource } from '@/shared/logging/preview-scrub-performance'
-import { getAnimatedTransform } from '../canvas-keyframes'
 import {
   getCanvasRenderScale,
   getLogicalCanvasSize,
   scaleTextItemForCanvas,
 } from '../canvas-render-scale'
-import { combineEffects, getAdjustmentLayerEffects, getGpuEffectInstances } from '../canvas-effects'
+import { getGpuEffectInstances } from '../canvas-effects'
 import {
   getItemRenderTimelineSpan,
   resolveCompositionSourceFrame,
@@ -70,6 +68,7 @@ import {
   createSubCompositionRenderContext,
   findSubCompOcclusionCutoffOrder,
   getActiveSubCompMasks,
+  type ActiveSubCompMask,
 } from './composition'
 import { resolveVideoParticipantSourceTime } from './video'
 import {
@@ -81,6 +80,11 @@ import {
   type SubCompLayerCompositeFlags,
   type SubCompLayerMode,
 } from './gpu-subcomp-layer-policy'
+import {
+  resolveSubCompChildLayerWrites,
+  resolveSubCompChildLayers,
+  type SubCompChildLayer,
+} from './gpu-subcomp-children-policy'
 import {
   canUseGpuVideoExtractorSource,
   parseGpuColor,
@@ -982,6 +986,8 @@ async function resolveGpuCompositionParticipantSource(
   return null
 }
 
+type SubCompMaskTextures = ActiveSubCompMask[]
+
 async function renderGpuSubCompChildrenToTexture(
   participant: TransitionParticipantRenderState<CompositionItem>,
   frame: number,
@@ -1027,79 +1033,59 @@ async function renderGpuSubCompChildrenToTexture(
     rctx,
     activeMasks,
   )
-  const visibleChildren: Array<{
-    participant: TransitionParticipantRenderState
-    masks: typeof activeMasks
-  }> = []
-  for (const track of subData.sortedTracks) {
-    if (!track.visible) continue
-    if (occlusionCutoffOrder !== null && track.order > occlusionCutoffOrder) continue
-    for (const item of track.items) {
-      if (localFrame < item.from || localFrame >= item.from + item.durationInFrames) continue
-      if (
-        item.type === 'adjustment' ||
-        item.type === 'controller' ||
-        (item.type === 'shape' && item.isMask)
-      )
-        continue
-      if (item.blendMode && item.blendMode !== 'normal' && !rctx.gpuMediaBlendPipeline) {
-        return null
-      }
-      const applicableMasks = activeMasks.filter((mask) =>
-        doesMaskAffectTrack(mask.trackOrder, track.order),
-      )
-      if (!areGpuSubCompMasksSupported(applicableMasks)) return null
-      const itemEffects =
-        (rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride?.(item.id) : undefined) ??
-        item.effects ??
-        []
-      const adjEffects = getAdjustmentLayerEffects(
-        track.order,
-        subAdjustmentLayers,
-        localFrame,
-        rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride : undefined,
-        rctx.renderMode === 'preview' ? rctx.getLiveItemSnapshotById : undefined,
-      )
-      const effects = combineEffects(itemEffects, adjEffects)
-      if (
-        effects.some((effect) => effect.enabled && effect.effect.type !== 'gpu-effect') ||
-        (effects.some((effect) => effect.enabled) && !rctx.gpuPipeline)
-      ) {
-        return null
-      }
-      visibleChildren.push({
-        participant: {
-          item,
-          transform: getAnimatedTransform(
-            item,
-            subData.keyframesMap.get(item.id),
-            localFrame,
-            subCanvasSettings,
-          ),
-          effects,
-          renderSpan: getItemRenderTimelineSpan(item),
-        },
-        masks: applicableMasks,
-      })
-    }
-  }
-  if (visibleChildren.length === 0) return null
+  const childLayers = resolveSubCompChildLayers({
+    sortedTracks: subData.sortedTracks,
+    keyframesMap: subData.keyframesMap,
+    localFrame,
+    occlusionCutoffOrder,
+    activeMasks,
+    adjustmentLayers: subAdjustmentLayers,
+    canvasSettings: subCanvasSettings,
+    effectsContext: rctx,
+    hasBlendPipeline: Boolean(rctx.gpuMediaBlendPipeline),
+    hasEffectsPipeline: Boolean(rctx.gpuPipeline),
+    areChildMasksSupported: areGpuSubCompMasksSupported,
+  })
+  if (!childLayers) return null
+  return renderSubCompChildLayers({
+    gpuPipeline,
+    layers: childLayers,
+    rctx: subRctx,
+    localFrame,
+    width,
+    height,
+  })
+}
 
-  const texture = gpuPipeline.getDevice().createTexture({
-    size: { width, height },
+/**
+ * Composites every planned child layer into one output texture, in plan order:
+ * the first layer clears the target, the rest blend over it. Any failure
+ * destroys the texture before the caller falls back.
+ */
+async function renderSubCompChildLayers(input: {
+  gpuPipeline: NonNullable<ItemRenderContext['gpuPipeline']>
+  layers: ReadonlyArray<SubCompChildLayer<SubCompMaskTextures[number]>>
+  rctx: ItemRenderContext
+  localFrame: number
+  width: number
+  height: number
+}): Promise<GPUTexture | null> {
+  const texture = input.gpuPipeline.getDevice().createTexture({
+    size: { width: input.width, height: input.height },
     format: 'rgba8unorm',
     usage:
       GPUTextureUsage.TEXTURE_BINDING |
       GPUTextureUsage.RENDER_ATTACHMENT |
       GPUTextureUsage.COPY_DST,
   })
+  const writes = resolveSubCompChildLayerWrites(input.layers.length)
   try {
-    let layerIndex = 0
-    for (const visibleChild of visibleChildren) {
+    for (let index = 0; index < input.layers.length; index++) {
+      const layer = input.layers[index]!
       const prepared = await prepareGpuMediaParticipant(
-        visibleChild.participant,
-        localFrame,
-        subRctx,
+        layer.participant,
+        input.localFrame,
+        input.rctx,
       )
       if (!prepared) {
         texture.destroy()
@@ -1108,13 +1094,10 @@ async function renderGpuSubCompChildrenToTexture(
       try {
         const rendered = await renderPreparedGpuSubCompLayerToTexture(
           prepared,
-          subRctx,
+          input.rctx,
           texture,
-          visibleChild.masks,
-          {
-            clear: layerIndex === 0,
-            blend: true,
-          },
+          layer.masks,
+          writes[index]!,
         )
         if (!rendered) {
           texture.destroy()
@@ -1123,7 +1106,6 @@ async function renderGpuSubCompChildrenToTexture(
       } finally {
         prepared.media.close?.()
       }
-      layerIndex++
     }
     return texture
   } catch (error) {
@@ -1131,8 +1113,6 @@ async function renderGpuSubCompChildrenToTexture(
     throw error
   }
 }
-
-type SubCompMaskTextures = ReturnType<typeof getActiveSubCompMasks>
 
 /** Every scratch texture one layer owns, named by the role the composite phases read it as. */
 interface SubCompLayerStage {
@@ -1501,7 +1481,7 @@ export function getGpuShapeUnsupportedReason(
   return null
 }
 
-function areGpuSubCompMasksSupported(masks: ReturnType<typeof getActiveSubCompMasks>): boolean {
+function areGpuSubCompMasksSupported(masks: ReadonlyArray<ActiveSubCompMask>): boolean {
   if (masks.length === 0) return true
   for (const mask of masks) {
     if (mask.bitmapMask) continue
@@ -1518,7 +1498,7 @@ function areGpuSubCompMasksSupported(masks: ReturnType<typeof getActiveSubCompMa
 }
 
 function renderGpuSubCompMaskToTexture(
-  mask: ReturnType<typeof getActiveSubCompMasks>[number],
+  mask: ActiveSubCompMask,
   rctx: ItemRenderContext,
   outputTexture: GPUTexture,
 ): boolean {
@@ -1645,9 +1625,7 @@ function getGpuTextTextureCacheKey(item: TextItem, width: number, height: number
   })
 }
 
-function getGpuBitmapMaskTextureCacheKey(
-  mask: ReturnType<typeof getActiveSubCompMasks>[number],
-): string {
+function getGpuBitmapMaskTextureCacheKey(mask: ActiveSubCompMask): string {
   return JSON.stringify({
     id: mask.shape.id,
     shapeType: mask.shape.shapeType,

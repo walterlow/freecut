@@ -378,12 +378,11 @@ export function findSubCompOcclusionCutoffOrder(
   return null
 }
 
-export function getActiveSubCompMasks(
-  subData: SubCompRenderData,
-  localFrame: number,
-  subCanvasSettings: CanvasSettings,
-  rctx: ItemRenderContext,
-): Array<{
+/**
+ * One prepared sub-composition mask: the mask shape, its resolved transform and
+ * the fields the mask pass reads.
+ */
+export interface ActiveSubCompMask {
   shape: ShapeItem
   transform: ItemTransform
   path?: Path2D
@@ -393,7 +392,14 @@ export function getActiveSubCompMasks(
   opacity: number
   maskType: 'clip' | 'alpha'
   trackOrder: number
-}> {
+}
+
+export function getActiveSubCompMasks(
+  subData: SubCompRenderData,
+  localFrame: number,
+  subCanvasSettings: CanvasSettings,
+  rctx: ItemRenderContext,
+): ActiveSubCompMask[] {
   const subMaskSettings: MaskCanvasSettings = {
     width: subCanvasSettings.width,
     height: subCanvasSettings.height,
@@ -401,17 +407,7 @@ export function getActiveSubCompMasks(
     logicalHeight: subCanvasSettings.logicalHeight,
     fps: subCanvasSettings.fps,
   }
-  const activeMasks: Array<{
-    shape: ShapeItem
-    transform: ItemTransform
-    path?: Path2D
-    bitmapMask?: OffscreenCanvas
-    inverted: boolean
-    feather: number
-    opacity: number
-    maskType: 'clip' | 'alpha'
-    trackOrder: number
-  }> = []
+  const activeMasks: ActiveSubCompMask[] = []
   for (const track of subData.sortedTracks) {
     if (!track.visible) continue
     for (const subItem of track.items) {
