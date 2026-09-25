@@ -65,6 +65,16 @@ import {
   transformChanged,
 } from './mask-editor-overlay-utils'
 import {
+  planPenPathRender,
+  type OverlayPoint,
+  type PenClosingPreview,
+  type PenCursorHint,
+  type PenHandleMark,
+  type PenRubberBand,
+  type PenSegmentGroup,
+  type PenVertexMark,
+} from './mask-editor-pen-render-plan'
+import {
   findBestCanvasDropPlacement,
   createClassicTrack,
   getTrackKind,
@@ -93,6 +103,104 @@ const PEN_BEZIER_DRAG_THRESHOLD = 10
 /** Segment sampling density for interior hit testing on curved paths */
 const CURVE_HIT_TEST_STEPS = 16
 const DEFAULT_PATH_SHAPE_DURATION_SECONDS = 5
+
+/** Paint the pen cursor dot shown before the first point is placed. */
+function drawPenCursorHint(ctx: CanvasRenderingContext2D, hint: PenCursorHint | null): void {
+  if (!hint) return
+  ctx.beginPath()
+  ctx.arc(hint.position.x, hint.position.y, hint.radius, 0, Math.PI * 2)
+  ctx.fillStyle = hint.fill
+  ctx.fill()
+}
+
+/** Paint the segments the pen has already placed. */
+function drawPenSegments(
+  ctx: CanvasRenderingContext2D,
+  group: PenSegmentGroup | null,
+  drawSegment: (ctx: CanvasRenderingContext2D, curr: MaskVertex, next: MaskVertex) => void,
+): void {
+  if (!group) return
+  ctx.beginPath()
+  ctx.moveTo(group.moveTo.x, group.moveTo.y)
+  for (const pair of group.pairs) {
+    drawSegment(ctx, pair.from, pair.to)
+  }
+  ctx.strokeStyle = group.stroke
+  ctx.lineWidth = group.lineWidth
+  ctx.stroke()
+}
+
+/** Paint the dashed preview of the segment that would close the path. */
+function drawPenClosingPreview(
+  ctx: CanvasRenderingContext2D,
+  preview: PenClosingPreview | null,
+  drawSegment: (ctx: CanvasRenderingContext2D, curr: MaskVertex, next: MaskVertex) => void,
+): void {
+  if (!preview) return
+  ctx.beginPath()
+  ctx.moveTo(preview.moveTo.x, preview.moveTo.y)
+  drawSegment(ctx, preview.from, preview.to)
+  ctx.strokeStyle = preview.stroke
+  ctx.lineWidth = preview.lineWidth
+  ctx.setLineDash(preview.dash)
+  ctx.stroke()
+  ctx.setLineDash([])
+}
+
+/** Paint the dashed rubber band from the last placed point to the cursor. */
+function drawPenRubberBand(ctx: CanvasRenderingContext2D, band: PenRubberBand | null): void {
+  if (!band) return
+  ctx.beginPath()
+  ctx.moveTo(band.moveTo.x, band.moveTo.y)
+  if (band.control) {
+    ctx.quadraticCurveTo(band.control.x, band.control.y, band.to.x, band.to.y)
+  } else {
+    ctx.lineTo(band.to.x, band.to.y)
+  }
+  ctx.strokeStyle = band.stroke
+  ctx.lineWidth = band.lineWidth
+  ctx.setLineDash(band.dash)
+  ctx.stroke()
+  ctx.setLineDash([])
+}
+
+/** Paint one bezier handle: the stem from its anchor, then the knob. */
+function drawPenHandleMark(
+  ctx: CanvasRenderingContext2D,
+  anchor: OverlayPoint,
+  mark: PenHandleMark,
+): void {
+  ctx.beginPath()
+  ctx.moveTo(anchor.x, anchor.y)
+  ctx.lineTo(mark.stemEnd.x, mark.stemEnd.y)
+  ctx.strokeStyle = 'rgba(34, 211, 238, 0.5)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.arc(mark.stemEnd.x, mark.stemEnd.y, HANDLE_RADIUS, 0, Math.PI * 2)
+  ctx.fillStyle = mark.fill
+  ctx.fill()
+  ctx.strokeStyle = '#fff'
+  ctx.lineWidth = 1
+  ctx.stroke()
+}
+
+/** Paint every placed pen point: its handles, selection ring, then the anchor. */
+function drawPenVertexMarks(ctx: CanvasRenderingContext2D, marks: readonly PenVertexMark[]): void {
+  for (const mark of marks) {
+    if (mark.outHandle) drawPenHandleMark(ctx, mark.position, mark.outHandle)
+    if (mark.inHandle) drawPenHandleMark(ctx, mark.position, mark.inHandle)
+    if (mark.drawSelectionRing) drawSelectedVertexRing(ctx, mark.position.x, mark.position.y)
+    ctx.beginPath()
+    ctx.arc(mark.position.x, mark.position.y, VERTEX_RADIUS, 0, Math.PI * 2)
+    ctx.fillStyle = mark.fill
+    ctx.fill()
+    ctx.strokeStyle = mark.stroke
+    ctx.lineWidth = mark.lineWidth
+    ctx.stroke()
+  }
+}
 
 function applyDraggedHandle(
   vertex: MaskVertex,
@@ -507,176 +615,45 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     [selectionMarquee],
   )
 
-  /** Draw open pen path with rubber-band line */
+  /**
+   * Draw open pen path with rubber-band line.
+   *
+   * The geometry and per-point visuals come from `planPenPathRender`; this
+   * callback only replays the plan as 2D-context calls, in the same order the
+   * pen path has always been painted.
+   */
   const drawPenPath = useCallback(
     (ctx: CanvasRenderingContext2D) => {
-      if (penVertices.length === 0) {
-        // Show cursor crosshair hint
-        if (penCursorPos) {
-          const [cx, cy] = normToScreen(penCursorPos)
-          ctx.beginPath()
-          ctx.arc(cx, cy, 3, 0, Math.PI * 2)
-          ctx.fillStyle = 'rgba(34, 211, 238, 0.5)'
-          ctx.fill()
-        }
-        return
-      }
+      const plan = planPenPathRender({
+        bounds: getItemScreenBounds(),
+        vertices: penVertices,
+        cursorPos: penCursorPos,
+        penDraggingHandle,
+        draggingVertexIndex,
+        draggingHandle,
+        selectedVertexIndices,
+        hoveredVertexIndex,
+        hoveredHandle,
+        closeRadius: CLOSE_RADIUS,
+      })
 
-      // Draw placed segments
-      ctx.beginPath()
-      const [sx, sy] = vertexToScreen(penVertices[0]!)
-      ctx.moveTo(sx, sy)
-
-      for (let i = 0; i < penVertices.length - 1; i++) {
-        drawSegment(ctx, penVertices[i]!, penVertices[i + 1]!)
-      }
-
-      ctx.strokeStyle = '#22d3ee'
-      ctx.lineWidth = 1.5
-      ctx.stroke()
-
-      const isClosingPreview =
-        penVertices.length >= 3 && draggingVertexIndex === 0 && draggingHandle === 'out'
-
-      // Preview the closing segment while shaping the final bezier.
-      if (isClosingPreview) {
-        const last = penVertices[penVertices.length - 1]!
-        const first = penVertices[0]!
-
-        ctx.beginPath()
-        const [lx, ly] = vertexToScreen(last)
-        ctx.moveTo(lx, ly)
-        drawSegment(ctx, last, first)
-        ctx.strokeStyle = 'rgba(34, 211, 238, 0.4)'
-        ctx.lineWidth = 1
-        ctx.setLineDash([4, 4])
-        ctx.stroke()
-        ctx.setLineDash([])
-      }
-
-      // Rubber-band line from last vertex to cursor
-      if (penCursorPos && !penDraggingHandle && !isClosingPreview) {
-        const last = penVertices[penVertices.length - 1]!
-        const [lx, ly] = vertexToScreen(last)
-        const [cx, cy] = normToScreen(penCursorPos)
-
-        ctx.beginPath()
-        ctx.moveTo(lx, ly)
-
-        // If last vertex has an out handle, draw a curve preview
-        if (last.outHandle[0] !== 0 || last.outHandle[1] !== 0) {
-          const [ohx, ohy] = handleToScreen(last, 'out')
-          ctx.quadraticCurveTo(ohx, ohy, cx, cy)
-        } else {
-          ctx.lineTo(cx, cy)
-        }
-
-        ctx.strokeStyle = 'rgba(34, 211, 238, 0.4)'
-        ctx.lineWidth = 1
-        ctx.setLineDash([4, 4])
-        ctx.stroke()
-        ctx.setLineDash([])
-      }
-
-      // Draw vertices
-      for (let i = 0; i < penVertices.length; i++) {
-        const v = penVertices[i]!
-        const [vx, vy] = vertexToScreen(v)
-
-        // Draw handles for current vertex if it has them
-        const hasOutHandle = v.outHandle[0] !== 0 || v.outHandle[1] !== 0
-        const hasInHandle = v.inHandle[0] !== 0 || v.inHandle[1] !== 0
-
-        if (hasOutHandle) {
-          const [hx, hy] = handleToScreen(v, 'out')
-          ctx.beginPath()
-          ctx.moveTo(vx, vy)
-          ctx.lineTo(hx, hy)
-          ctx.strokeStyle = 'rgba(34, 211, 238, 0.5)'
-          ctx.lineWidth = 1
-          ctx.stroke()
-
-          ctx.beginPath()
-          ctx.arc(hx, hy, HANDLE_RADIUS, 0, Math.PI * 2)
-          const isActiveOut = draggingVertexIndex === i && draggingHandle === 'out'
-          const isHoveredOut = hoveredVertexIndex === i && hoveredHandle === 'out'
-          ctx.fillStyle = isActiveOut
-            ? '#fff'
-            : isHoveredOut
-              ? '#22d3ee'
-              : 'rgba(34, 211, 238, 0.6)'
-          ctx.fill()
-          ctx.strokeStyle = '#fff'
-          ctx.lineWidth = 1
-          ctx.stroke()
-        }
-        if (hasInHandle) {
-          const [hx, hy] = handleToScreen(v, 'in')
-          ctx.beginPath()
-          ctx.moveTo(vx, vy)
-          ctx.lineTo(hx, hy)
-          ctx.strokeStyle = 'rgba(34, 211, 238, 0.5)'
-          ctx.lineWidth = 1
-          ctx.stroke()
-
-          ctx.beginPath()
-          ctx.arc(hx, hy, HANDLE_RADIUS, 0, Math.PI * 2)
-          const isActiveIn = draggingVertexIndex === i && draggingHandle === 'in'
-          const isHoveredIn = hoveredVertexIndex === i && hoveredHandle === 'in'
-          ctx.fillStyle = isActiveIn ? '#fff' : isHoveredIn ? '#22d3ee' : 'rgba(34, 211, 238, 0.6)'
-          ctx.fill()
-          ctx.strokeStyle = '#fff'
-          ctx.lineWidth = 1
-          ctx.stroke()
-        }
-
-        // First vertex: highlight when cursor is close (close indicator)
-        const isFirstVertex = i === 0
-        const isCloseHovered =
-          isFirstVertex &&
-          penVertices.length >= 3 &&
-          penCursorPos != null &&
-          (() => {
-            const [fx, fy] = vertexToScreen(penVertices[0]!)
-            const [mx, my] = normToScreen(penCursorPos)
-            return Math.hypot(mx - fx, my - fy) < CLOSE_RADIUS
-          })()
-        const isActive = draggingVertexIndex === i && draggingHandle === null
-        const isSelected = selectedVertexIndices.includes(i)
-        const isHovered = hoveredVertexIndex === i && hoveredHandle === null
-        if (isSelected) {
-          drawSelectedVertexRing(ctx, vx, vy)
-        }
-        ctx.beginPath()
-        ctx.arc(vx, vy, VERTEX_RADIUS, 0, Math.PI * 2)
-        ctx.fillStyle = isSelected
-          ? isActive
-            ? '#fde68a'
-            : '#fef3c7'
-          : isActive
-            ? '#fff'
-            : isCloseHovered || isHovered
-              ? '#22d3ee'
-              : '#0e7490'
-        ctx.fill()
-        ctx.strokeStyle = isSelected ? '#f59e0b' : isCloseHovered || isActive ? '#fff' : '#22d3ee'
-        ctx.lineWidth = isCloseHovered || isSelected ? 2.5 : 1.5
-        ctx.stroke()
-      }
+      drawPenCursorHint(ctx, plan.cursorHint)
+      drawPenSegments(ctx, plan.segments, drawSegment)
+      drawPenClosingPreview(ctx, plan.closingPreview, drawSegment)
+      drawPenRubberBand(ctx, plan.rubberBand)
+      drawPenVertexMarks(ctx, plan.vertexMarks)
     },
     [
+      drawSegment,
+      getItemScreenBounds,
       penVertices,
       penCursorPos,
       penDraggingHandle,
-      vertexToScreen,
-      handleToScreen,
-      normToScreen,
       draggingVertexIndex,
       draggingHandle,
       selectedVertexIndices,
       hoveredVertexIndex,
       hoveredHandle,
-      drawSegment,
     ],
   )
 
