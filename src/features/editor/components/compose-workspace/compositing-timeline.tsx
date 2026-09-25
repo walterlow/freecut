@@ -17,7 +17,7 @@ import { useSelectionStore } from '@/shared/state/selection'
 import { useClipboardStore } from '@/shared/state/clipboard'
 import type { DirectLinkableProperty } from '@/types/keyframe'
 import type { TimelineItem, TimelineTrack } from '@/types/timeline'
-import { addItemOnNewTrack, addItemsOnNewTracks, buildDroppedCompositionTimelineItems, buildDroppedMediaTimelineItems, captureSnapshot, CompactNavigator, createTimelineTemplateItem, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, getDroppedMediaDurationInFrames, isTimelineTemplateDragData, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
+import { addItemOnNewTrack, addItemsOnNewTracks, captureSnapshot, CompactNavigator, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
 import { clearSpanDragVisuals, clearSpanTrimVisuals, createMotionSpanDragCommands, createMotionSpanTrimCommands, type SpanDragState, type SpanTrimState } from './motion-span-interactions'
 import { createMotionRowReorderCommands, type RowReorderDragState } from './motion-row-reorder'
 import { advanceMotionScrubPan, createMotionTimeViewportController, formatFrameTime, normalizeMotionTimeViewport, resolveMotionScrubFramePaint, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
@@ -29,7 +29,7 @@ import { LAYER_COLUMN_WIDTH, LAYER_MODE_COLUMN_WIDTH, LAYER_PARENT_COLUMN_WIDTH,
 import { useGizmoStore, useMaskEditorStore } from '@/features/editor/deps/preview'
 import { getLinkedAudioCompanion } from '@/shared/utils/linked-media'
 import { trimCompositionToActiveRegion, useMarkersStore } from '@/features/editor/deps/timeline-store'
-import { clearMediaDragData, getMediaDragData, resolveMediaUrl, useMediaLibraryStore } from '@/features/editor/deps/media-library-contract'
+import { clearMediaDragData, getMediaDragData, useMediaLibraryStore } from '@/features/editor/deps/media-library-contract'
 import { useComposeUiStore } from './compose-ui-store'
 import { NewCompositionDialog } from './new-composition-dialog'
 import { TransformParentPickWhipOverlay } from './transform-parent-pick-whip-overlay'
@@ -45,6 +45,14 @@ import {
   type MotionRow,
 } from './motion-layer-row-model'
 import { MotionLayerLane } from './motion-layer-lane'
+import {
+  buildCompositionDropLayer,
+  buildDroppedMediaLayers,
+  buildTemplateDropLayer,
+  resolveCompositionDropId,
+  resolveMotionDropFrame,
+  resolveMotionDropPayload,
+} from './motion-layer-drop'
 import { MotionLayerPropertyRows } from './motion-layer-property-rows'
 import {
   MotionLayerModeCell,
@@ -352,27 +360,6 @@ interface CompositingTimelineProps {
 
 interface CompositingTimelineCoreProps extends CompositingTimelineProps {
   itemsSnapshot: CompositingTimelineItemsSnapshot
-}
-
-function createLayerTrack(params: {
-  id: string
-  name: string
-  kind: 'video' | 'audio'
-  order: number
-}): TimelineTrack {
-  return {
-    id: params.id,
-    name: params.name,
-    kind: params.kind,
-    height: LAYER_ROW_HEIGHT,
-    locked: false,
-    syncLock: true,
-    visible: true,
-    muted: false,
-    solo: false,
-    order: params.order,
-    items: [],
-  }
 }
 
 
@@ -1156,28 +1143,15 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
         return false
       }
 
-      const trackId = crypto.randomUUID()
-      const order = latestTracks.reduce((max, track) => Math.max(max, track.order), -1) + 1
-      const track = createLayerTrack({ id: trackId, name: child.name, kind: 'video', order })
-      const [item] = buildDroppedCompositionTimelineItems({
-        compositionId: child.id,
+      const layer = buildCompositionDropLayer({
         composition: child,
-        label: child.name,
-        placements: [
-          {
-            trackId,
-            from,
-            durationInFrames: Math.max(
-              1,
-              Math.min(durationInFrames - from, child.durationInFrames),
-            ),
-            mediaType: 'video',
-          },
-        ],
+        tracks: latestTracks,
+        from,
+        durationInFrames,
       })
-      if (!item || item.type !== 'composition') return false
-      addItemOnNewTrack(item, [...latestTracks, track])
-      selectItems([item.id])
+      if (!layer) return false
+      addItemOnNewTrack(layer.item, [...latestTracks, layer.track])
+      selectItems([layer.item.id])
       return true
     },
     [activeCompositionId, composition, compositionById, durationInFrames, selectItems, t],
@@ -1189,54 +1163,41 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
       setDropActive(false)
       if (!composition || composition.editorKind !== 'composite-2d') return
 
-      const raw = event.dataTransfer.getData('application/json')
-      let payload: unknown = getMediaDragData()
-      if (raw) {
-        try {
-          payload = JSON.parse(raw)
-        } catch {
-          payload = null
-        }
-      }
-      clearMediaDragData()
-      if (!payload || typeof payload !== 'object') return
-
-      const dropFrame = Math.max(
-        0,
-        Math.min(
-          (compositionEndFrame ?? durationInFrames) - 1,
-          usePlaybackStore.getState().currentFrame,
-        ),
+      const payload = resolveMotionDropPayload(
+        event.dataTransfer.getData('application/json'),
+        getMediaDragData(),
       )
-      const candidate = payload as { type?: unknown; compositionId?: unknown }
-      if (candidate.type === 'composition' && typeof candidate.compositionId === 'string') {
-        insertCompositionLayer(candidate.compositionId, dropFrame)
+      clearMediaDragData()
+      if (!payload) return
+
+      const dropFrame = resolveMotionDropFrame({
+        currentFrame: usePlaybackStore.getState().currentFrame,
+        compositionEndFrame,
+        durationInFrames,
+      })
+      const droppedCompositionId = resolveCompositionDropId(payload)
+      if (droppedCompositionId) {
+        insertCompositionLayer(droppedCompositionId, dropFrame)
         return
       }
 
       const latestTracks = useItemsStore.getState().tracks
       const nextOrder = latestTracks.reduce((max, track) => Math.max(max, track.order), -1) + 1
-      if (isTimelineTemplateDragData(payload)) {
-        const trackId = crypto.randomUUID()
-        const track = createLayerTrack({
-          id: trackId,
-          name: payload.label,
-          kind: 'video',
-          order: nextOrder,
-        })
-        const item = createTimelineTemplateItem({
-          template: payload,
-          placement: {
-            trackId,
-            from: dropFrame,
-            durationInFrames: Math.max(1, durationInFrames - dropFrame),
-            canvasWidth: composition.width,
-            canvasHeight: composition.height,
-            fps,
-          },
-        })
-        addItemOnNewTrack(item, [...latestTracks, track])
-        selectItems([item.id])
+      const canvas = {
+        width: composition.width,
+        height: composition.height,
+        fps,
+      }
+      const templateLayer = buildTemplateDropLayer({
+        payload,
+        nextOrder,
+        dropFrame,
+        durationInFrames,
+        canvas,
+      })
+      if (templateLayer) {
+        addItemOnNewTrack(templateLayer.item, [...latestTracks, templateLayer.track])
+        selectItems([templateLayer.item.id])
         return
       }
 
@@ -1246,46 +1207,13 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
         return
       }
 
-      const resolved = await Promise.all(
-        entries.map(async (entry, index) => {
-          const blobUrl = await resolveMediaUrl(entry.mediaId)
-          if (!blobUrl) return null
-          const trackId = crypto.randomUUID()
-          const track = createLayerTrack({
-            id: trackId,
-            name: entry.label,
-            kind: entry.mediaType === 'audio' ? 'audio' : 'video',
-            order: nextOrder + index,
-          })
-          const sourceDuration = getDroppedMediaDurationInFrames(entry.media, entry.mediaType, fps)
-          const [item] = buildDroppedMediaTimelineItems({
-            media: entry.media,
-            mediaId: entry.mediaId,
-            mediaType: entry.mediaType,
-            label: entry.label,
-            timelineFps: fps,
-            blobUrl,
-            thumbnailUrl: null,
-            canvasWidth: composition.width,
-            canvasHeight: composition.height,
-            placement: {
-              primary: {
-                trackId,
-                from: dropFrame,
-                durationInFrames: Math.max(
-                  1,
-                  Math.min(durationInFrames - dropFrame, sourceDuration),
-                ),
-              },
-            },
-            linkVideoAudio: false,
-          })
-          return item ? { item, track } : null
-        }),
-      )
-      const layers = resolved.filter(
-        (entry): entry is { item: TimelineItem; track: TimelineTrack } => entry !== null,
-      )
+      const layers = await buildDroppedMediaLayers({
+        entries,
+        nextOrder,
+        dropFrame,
+        durationInFrames,
+        canvas,
+      })
       if (layers.length === 0) {
         toast.error(t('editor.compose.mediaDropFailed'))
         return
