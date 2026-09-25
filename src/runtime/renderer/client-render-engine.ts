@@ -51,6 +51,7 @@ import { ReverseVideoFrameCache } from './reverse-video-frame-cache'
 import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
 import { resolveCompositionSourceFrame } from './render-span'
 import { itemHasEnabledGpuEffect, isAnimatedImage, isGifFormat, subCompositionRenderDataHasGpuEffects } from './render-engine-predicates'
+import { buildTransitionTrackOrderById, resolveCompositionRenderTracks } from './composition-render-inputs'
 
 function getLog() {
   return createLogger('ClientRenderEngine')
@@ -572,25 +573,14 @@ export async function createCompositionRenderer(
   const renderMode = executionPolicy.itemRenderMode
   const isComparisonMode = rendererMode === 'comparison'
   const useProxyMedia = options.useProxyMedia === true
-  const compositionTracks =
-    options.renderText === false
-      ? composition.tracks?.map((track) => ({
-          ...track,
-          items: (track.items ?? []).filter((item) => item.type !== 'text'),
-        }))
-      : composition.tracks
-  const tracks =
-    compositionTracks?.map((track) => ({
-      ...track,
-      items: (track.items ?? []).map((item) =>
-        item.type === 'video'
-          ? resolveReverseConformedVideoItem(item, fps, {
-              mode: isComparisonMode ? 'preview' : renderMode,
-              useProxy: options.useProxyMedia,
-            })
-          : item,
-      ),
-    })) ?? []
+  const tracks = resolveCompositionRenderTracks({
+    tracks: composition.tracks,
+    fps,
+    renderText: options.renderText,
+    isComparisonMode,
+    renderMode,
+    useProxy: options.useProxyMedia,
+  })
   const getPreviewTransformOverride = options.getPreviewTransformOverride
   const getPreviewEffectsOverride = options.getPreviewEffectsOverride
   const getPreviewCornerPinOverride = options.getPreviewCornerPinOverride
@@ -600,6 +590,8 @@ export async function createCompositionRenderer(
   const domVideoElementProvider = options.domVideoElementProvider
   const hasDom = typeof document !== 'undefined'
   const previewStrictDecode = executionPolicy.usesStrictPreviewDecode
+  // Workers render through mediabunny only; the HTML5 fallback pool is main-thread.
+  const canUseFallbackVideoElements = hasDom && !previewStrictDecode
 
   const canvasSettings: CanvasSettings = {
     width: canvas.width,
@@ -751,7 +743,7 @@ export async function createCompositionRenderer(
   const videoItemsById = new Map<string, VideoItem>()
   // Keep video elements as fallback if mediabunny fails
   const videoElements = new Map<string, HTMLVideoElement>()
-  const fallbackVideoPool = hasDom && !previewStrictDecode ? new VideoSourcePool() : null
+  const fallbackVideoPool = canUseFallbackVideoElements ? new VideoSourcePool() : null
   const fallbackVideoBySrc = new Set<string>()
   const fallbackVideoClipIdByItem = new Map<string, string>()
   let fallbackVideoClipCounter = 0
@@ -816,7 +808,7 @@ export async function createCompositionRenderer(
           registerVideoItem(item.id, videoItem.src)
 
           // Also create fallback video element in case mediabunny fails (main thread only).
-          if (hasDom && !previewStrictDecode && !isComparisonMode) {
+          if (canUseFallbackVideoElements && !isComparisonMode) {
             bindFallbackVideoElement(item.id, videoItem.src)
           }
         }
@@ -1040,12 +1032,10 @@ export async function createCompositionRenderer(
   // Collect adjustment layers
   const adjustmentLayers = renderPlan.visibleAdjustmentLayers as AdjustmentLayerWithTrackOrder[]
 
-  const transitionTrackOrderById = new Map<string, number>()
-  for (const window of renderPlan.transitionWindows) {
-    const transitionTrackId = window.transition.trackId
-    const trackOrder = transitionTrackId ? (trackOrderMap.get(transitionTrackId) ?? 0) : 0
-    transitionTrackOrderById.set(window.transition.id, trackOrder)
-  }
+  const transitionTrackOrderById = buildTransitionTrackOrderById(
+    renderPlan.transitionWindows,
+    trackOrderMap,
+  )
 
   const maskSettings: MaskCanvasSettings = canvasSettings
   const maskFrameIndex = buildMaskFrameIndex(tracks, maskSettings)
