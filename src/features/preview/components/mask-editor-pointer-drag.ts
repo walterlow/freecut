@@ -9,8 +9,59 @@
  */
 
 import type { MaskVertex } from '@/types/masks'
-import type { PenHit } from './mask-editor-hit-testing'
+import type { Transform } from '../types/gizmo'
+import type { MaskHit, PenHit } from './mask-editor-hit-testing'
 import { cloneVertices } from './mask-editor-overlay-utils'
+
+/** An edit-mode drag in flight: the control point or shape body being dragged. */
+export type EditDragState =
+  | {
+      type: 'vertex' | 'handle'
+      startVertices: MaskVertex[]
+      vertexIndex: number
+      handleType: 'in' | 'out' | null
+      startCanvasPos: [number, number]
+    }
+  | {
+      type: 'shape'
+      startTransform: Transform
+      interactionId: number
+    }
+  | {
+      type: 'marquee'
+      startScreenPos: [number, number]
+      currentScreenPos: [number, number]
+      hasMoved: boolean
+    }
+
+/** The vertex/handle drag an edit-mode hit starts, or null for any other hit. */
+export function createVertexHandleDragState(
+  vertices: MaskVertex[],
+  hit: MaskHit,
+  canvasPos: [number, number],
+): Extract<EditDragState, { type: 'vertex' | 'handle' }> | null {
+  if (hit.type === 'vertex') {
+    return {
+      type: 'vertex',
+      startVertices: cloneVertices(vertices),
+      vertexIndex: hit.index,
+      handleType: null,
+      startCanvasPos: canvasPos,
+    }
+  }
+
+  if (hit.type === 'inHandle' || hit.type === 'outHandle') {
+    return {
+      type: 'handle',
+      startVertices: cloneVertices(vertices),
+      vertexIndex: hit.index,
+      handleType: hit.type === 'inHandle' ? 'in' : 'out',
+      startCanvasPos: canvasPos,
+    }
+  }
+
+  return null
+}
 
 /** A pen pointer drag in flight: what was grabbed, and where it started. */
 export type PenInteraction =

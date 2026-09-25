@@ -71,10 +71,12 @@ import {
 } from './mask-editor-pen-render-plan'
 import {
   createPenHitInteraction,
+  createVertexHandleDragState,
   dragVerticesByCanvasDelta,
   resolvePenDragStart,
   resolvePenHitHandle,
   resolvePenPointerDownDragStart,
+  type EditDragState,
   type PenDragStart,
   type PenInteraction,
 } from './mask-editor-pointer-drag'
@@ -212,52 +214,6 @@ function drawPenVertexMarks(ctx: CanvasRenderingContext2D, marks: readonly PenVe
     ctx.stroke()
   }
 }
-
-function applyDraggedHandle(
-  vertex: MaskVertex,
-  handleType: 'in' | 'out',
-  nextHandle: [number, number],
-  breakTangents: boolean,
-): void {
-  const oppositeKey = handleType === 'in' ? 'outHandle' : 'inHandle'
-  const selectedKey = handleType === 'in' ? 'inHandle' : 'outHandle'
-  vertex[selectedKey] = nextHandle
-
-  if (breakTangents || vertex.tangentMode === 'broken' || vertex.tangentMode === 'corner') {
-    if (breakTangents) vertex.tangentMode = 'broken'
-    return
-  }
-
-  const nextLength = Math.hypot(nextHandle[0], nextHandle[1])
-  const opposite = vertex[oppositeKey]
-  const oppositeLength = Math.hypot(opposite[0], opposite[1])
-  if (vertex.tangentMode === 'continuous' && nextLength > Number.EPSILON) {
-    const scale = oppositeLength / nextLength
-    vertex[oppositeKey] = [-nextHandle[0] * scale, -nextHandle[1] * scale]
-  } else {
-    vertex[oppositeKey] = [-nextHandle[0], -nextHandle[1]]
-    vertex.tangentMode = 'smooth'
-  }
-}
-type EditDragState =
-  | {
-      type: 'vertex' | 'handle'
-      startVertices: MaskVertex[]
-      vertexIndex: number
-      handleType: 'in' | 'out' | null
-      startCanvasPos: [number, number]
-    }
-  | {
-      type: 'shape'
-      startTransform: Transform
-      interactionId: number
-    }
-  | {
-      type: 'marquee'
-      startScreenPos: [number, number]
-      currentScreenPos: [number, number]
-      hasMoved: boolean
-    }
 
 type CommittedEditSnapshot = {
   vertices: MaskVertex[]
@@ -1529,43 +1485,90 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     editingPathClosed,
   ])
 
+  const beginEditPointerInteraction = useCallback(() => {
+    editInteractionGenerationRef.current += 1
+    for (const id of pendingCleanupRafIdsRef.current) {
+      cancelAnimationFrame(id)
+    }
+    pendingCleanupRafIdsRef.current = []
+    setCommittedEditSnapshot(null)
+    const previousOwnedInteractionId = maskOwnedInteractionIdRef.current
+    if (previousOwnedInteractionId !== null) {
+      clearInteraction(previousOwnedInteractionId)
+      maskOwnedInteractionIdRef.current = null
+    }
+  }, [clearInteraction])
+
+  const startMarqueeDrag = useCallback(
+    (e: React.PointerEvent, localX: number, localY: number) => {
+      e.stopPropagation()
+      e.preventDefault()
+      canvasRef.current!.setPointerCapture(e.pointerId)
+      editDraggingRef.current = true
+      dragStateRef.current = {
+        type: 'marquee',
+        startScreenPos: [localX, localY],
+        currentScreenPos: [localX, localY],
+        hasMoved: false,
+      }
+      setHoveredShapeBody(false)
+      setHoveredSegmentIndex(null)
+      setHover(null)
+      setSelectionMarquee(null)
+    },
+    [setHover],
+  )
+
+  const startEditDrag = useCallback(
+    (dragState: Extract<EditDragState, { type: 'vertex' | 'handle' }>) => {
+      if (dragState.handleType) {
+        startHandleDrag(dragState.vertexIndex, dragState.handleType)
+      } else {
+        startVertexDrag(dragState.vertexIndex)
+      }
+    },
+    [startHandleDrag, startVertexDrag],
+  )
+
+  const startShapeTranslateDrag = useCallback(
+    (canvasPos: { x: number; y: number }) => {
+      const itemId = editingItemIdRef.current
+      if (!itemId) return
+
+      const interactionId = startTranslate(
+        itemId,
+        canvasPos,
+        itemTransformRef.current,
+        undefined,
+        'shape',
+      )
+      maskOwnedInteractionIdRef.current = interactionId
+      dragStateRef.current = {
+        type: 'shape',
+        startTransform: itemTransformRef.current,
+        interactionId,
+      }
+      setHoveredSegmentIndex(null)
+      setHover(null)
+      setHoveredShapeBody(true)
+    },
+    [startTranslate, setHover],
+  )
+
   const handleEditPointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (editDraggingRef.current) return
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!rect) return
 
-      editInteractionGenerationRef.current += 1
-      for (const id of pendingCleanupRafIdsRef.current) {
-        cancelAnimationFrame(id)
-      }
-      pendingCleanupRafIdsRef.current = []
-      setCommittedEditSnapshot(null)
-      const previousOwnedInteractionId = maskOwnedInteractionIdRef.current
-      if (previousOwnedInteractionId !== null) {
-        clearInteraction(previousOwnedInteractionId)
-        maskOwnedInteractionIdRef.current = null
-      }
+      beginEditPointerInteraction()
 
       const localX = e.clientX - rect.left
       const localY = e.clientY - rect.top
       const hit = hitTest(localX, localY)
 
       if (!hit) {
-        e.stopPropagation()
-        e.preventDefault()
-        canvasRef.current!.setPointerCapture(e.pointerId)
-        editDraggingRef.current = true
-        dragStateRef.current = {
-          type: 'marquee',
-          startScreenPos: [localX, localY],
-          currentScreenPos: [localX, localY],
-          hasMoved: false,
-        }
-        setHoveredShapeBody(false)
-        setHoveredSegmentIndex(null)
-        setHover(null)
-        setSelectionMarquee(null)
+        startMarqueeDrag(e, localX, localY)
         return
       }
 
@@ -1579,138 +1582,101 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       editDraggingRef.current = true
 
       const canvasPos = screenToCanvas(e.clientX, e.clientY, getLiveCoordParams())
+      const vertexDragState = createVertexHandleDragState(vertices, hit, [
+        canvasPos.x,
+        canvasPos.y,
+      ])
 
-      if (hit.type === 'vertex') {
-        startVertexDrag(hit.index)
-        dragStateRef.current = {
-          type: 'vertex',
-          startVertices: cloneVertices(vertices),
-          vertexIndex: hit.index,
-          handleType: null,
-          startCanvasPos: [canvasPos.x, canvasPos.y],
-        }
-      } else if (hit.type === 'inHandle' || hit.type === 'outHandle') {
-        const handleType = hit.type === 'inHandle' ? 'in' : 'out'
-        startHandleDrag(hit.index, handleType)
-        dragStateRef.current = {
-          type: 'handle',
-          startVertices: cloneVertices(vertices),
-          vertexIndex: hit.index,
-          handleType,
-          startCanvasPos: [canvasPos.x, canvasPos.y],
-        }
-      } else {
-        const itemId = editingItemIdRef.current
-        if (!itemId) return
-
-        const interactionId = startTranslate(
-          itemId,
-          canvasPos,
-          itemTransformRef.current,
-          undefined,
-          'shape',
-        )
-        maskOwnedInteractionIdRef.current = interactionId
-        dragStateRef.current = {
-          type: 'shape',
-          startTransform: itemTransformRef.current,
-          interactionId,
-        }
-        setHoveredSegmentIndex(null)
-        setHover(null)
-        setHoveredShapeBody(true)
+      if (vertexDragState) {
+        startEditDrag(vertexDragState)
+        dragStateRef.current = vertexDragState
+        return
       }
+
+      startShapeTranslateDrag(canvasPos)
     },
     [
       hitTest,
       getVertices,
       getLiveCoordParams,
-      startVertexDrag,
-      startHandleDrag,
-      setHover,
-      clearInteraction,
-      startTranslate,
+      startEditDrag,
+      beginEditPointerInteraction,
+      startMarqueeDrag,
+      startShapeTranslateDrag,
     ],
   )
 
-  const handleEditPointerMove = useCallback(
-    // fallow-ignore-next-line complexity
-    (e: React.PointerEvent) => {
-      if (editDraggingRef.current) {
-        const state = dragStateRef.current
-        if (!state) return
+  const applyMarqueeSelection = useCallback(
+    (marquee: SelectionMarquee) => {
+      const nextSelectedVertices = getVerticesInMarquee(marquee)
+      selectVertices(
+        nextSelectedVertices,
+        nextSelectedVertices[nextSelectedVertices.length - 1] ?? null,
+      )
+    },
+    [getVerticesInMarquee, selectVertices],
+  )
 
-        if (state.type === 'marquee') {
-          const currentScreenPos: [number, number] = [
-            e.clientX - (canvasRef.current?.getBoundingClientRect().left ?? 0),
-            e.clientY - (canvasRef.current?.getBoundingClientRect().top ?? 0),
-          ]
-          const marquee = getMarqueeBounds(state.startScreenPos, currentScreenPos)
-          const hasMoved = marquee.width >= DRAG_THRESHOLD || marquee.height >= DRAG_THRESHOLD
+  const updateMarqueeDrag = useCallback(
+    (state: Extract<EditDragState, { type: 'marquee' }>, e: React.PointerEvent) => {
+      const rect = canvasRef.current?.getBoundingClientRect()
+      const currentScreenPos: [number, number] = [
+        e.clientX - (rect?.left ?? 0),
+        e.clientY - (rect?.top ?? 0),
+      ]
+      const marquee = getMarqueeBounds(state.startScreenPos, currentScreenPos)
+      const hasMoved = marquee.width >= DRAG_THRESHOLD || marquee.height >= DRAG_THRESHOLD
 
-          dragStateRef.current = {
-            type: 'marquee',
-            startScreenPos: state.startScreenPos,
-            currentScreenPos,
-            hasMoved,
-          }
+      dragStateRef.current = {
+        type: 'marquee',
+        startScreenPos: state.startScreenPos,
+        currentScreenPos,
+        hasMoved,
+      }
 
-          setSelectionMarquee(hasMoved ? marquee : null)
-          if (hasMoved) {
-            const nextSelectedVertices = getVerticesInMarquee(marquee)
-            selectVertices(
-              nextSelectedVertices,
-              nextSelectedVertices[nextSelectedVertices.length - 1] ?? null,
-            )
-          }
-          return
-        }
+      setSelectionMarquee(hasMoved ? marquee : null)
+      if (hasMoved) {
+        applyMarqueeSelection(marquee)
+      }
+    },
+    [applyMarqueeSelection, getMarqueeBounds, setSelectionMarquee],
+  )
 
-        const moveCanvas = screenToCanvas(e.clientX, e.clientY, getLiveCoordParamsRef.current())
-
-        if (state.type === 'shape') {
-          updateInteraction(moveCanvas, e.shiftKey, e.ctrlKey, e.altKey)
-          return
-        }
-
-        const dx = moveCanvas.x - state.startCanvasPos[0]
-        const dy = moveCanvas.y - state.startCanvasPos[1]
-        const bounds = getItemScreenBoundsRef.current()
-        const scale = getEffectiveScale(coordParamsRef.current)
-        const itemWidth = bounds.width / scale
-        const itemHeight = bounds.height / scale
-
-        const newVertices = cloneVertices(state.startVertices)
-
-        if (state.handleType === null) {
-          const v = newVertices[state.vertexIndex]!
-          const orig = state.startVertices[state.vertexIndex]!
-          v.position[0] = orig.position[0] + dx / itemWidth
-          v.position[1] = orig.position[1] + dy / itemHeight
-        } else {
-          const v = newVertices[state.vertexIndex]!
-          const orig = state.startVertices[state.vertexIndex]!
-          const origHandle = state.handleType === 'in' ? orig.inHandle : orig.outHandle
-          const newHandle: [number, number] = [
-            origHandle[0] + dx / itemWidth,
-            origHandle[1] + dy / itemHeight,
-          ]
-
-          applyDraggedHandle(v, state.handleType, newHandle, e.altKey)
-        }
-
-        updatePreview(newVertices)
+  const updateActiveEditDrag = useCallback(
+    (state: EditDragState, e: React.PointerEvent) => {
+      if (state.type === 'marquee') {
+        updateMarqueeDrag(state, e)
         return
       }
 
-      // Hover detection (not dragging)
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (!rect) return
+      const moveCanvas = screenToCanvas(e.clientX, e.clientY, getLiveCoordParamsRef.current())
 
-      const localX = e.clientX - rect.left
-      const localY = e.clientY - rect.top
-      const hit = hitTest(localX, localY)
+      if (state.type === 'shape') {
+        updateInteraction(moveCanvas, e.shiftKey, e.ctrlKey, e.altKey)
+        return
+      }
 
+      const bounds = getItemScreenBoundsRef.current()
+      const scale = getEffectiveScale(coordParamsRef.current)
+      updatePreview(
+        dragVerticesByCanvasDelta({
+          startVertices: state.startVertices,
+          vertexIndex: state.vertexIndex,
+          handleType: state.handleType,
+          dx: moveCanvas.x - state.startCanvasPos[0],
+          dy: moveCanvas.y - state.startCanvasPos[1],
+          itemWidth: bounds.width / scale,
+          itemHeight: bounds.height / scale,
+          breakTangents: e.altKey,
+          smoothTangentOnDrag: false,
+        }),
+      )
+    },
+    [updateInteraction, updateMarqueeDrag, updatePreview],
+  )
+
+  const updateEditHover = useCallback(
+    (hit: MaskHit | null) => {
       if (!hit) {
         setHoveredShapeBody(false)
         setHoveredSegmentIndex(null)
@@ -1737,15 +1703,69 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         setHover(null)
       }
     },
-    [
-      getMarqueeBounds,
-      getVerticesInMarquee,
-      hitTest,
-      selectVertices,
-      setHover,
-      updatePreview,
-      updateInteraction,
-    ],
+    [setHover],
+  )
+
+  const handleEditPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (editDraggingRef.current) {
+        const state = dragStateRef.current
+        if (state) {
+          updateActiveEditDrag(state, e)
+        }
+        return
+      }
+
+      // Hover detection (not dragging)
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      updateEditHover(hitTest(e.clientX - rect.left, e.clientY - rect.top))
+    },
+    [hitTest, updateEditHover, updateActiveEditDrag],
+  )
+
+  const finishMarqueeDrag = useCallback(
+    (state: Extract<EditDragState, { type: 'marquee' }>) => {
+      setSelectionMarquee(null)
+      if (state.hasMoved) {
+        applyMarqueeSelection(getMarqueeBounds(state.startScreenPos, state.currentScreenPos))
+      } else {
+        selectVertex(null)
+      }
+    },
+    [applyMarqueeSelection, getMarqueeBounds, selectVertex],
+  )
+
+  const commitShapeMoveEdit = useCallback(
+    (state: Extract<EditDragState, { type: 'shape' }>) => {
+      const itemId = editingItemIdRef.current
+      const finalTransform = endInteraction()
+      if (finalTransform && itemId && transformChanged(state.startTransform, finalTransform)) {
+        const item = useItemsStore.getState().items.find((candidate) => candidate.id === itemId)
+        if (item?.type === 'shape' && item.shapeType === 'path') {
+          const currentFrame = usePlaybackStore.getState().currentFrame
+          const { baseTransform, autoKeyframeOperations } = buildMaskTransformPersistence(
+            item,
+            {
+              x: finalTransform.x,
+              y: finalTransform.y,
+            },
+            currentFrame,
+          )
+          commitMaskEdit(
+            itemId,
+            {
+              transform: baseTransform,
+              autoKeyframeOperations,
+            },
+            { operation: 'move' },
+          )
+        }
+      }
+      scheduleEditCommitCleanup(state.interactionId)
+    },
+    [buildMaskTransformPersistence, endInteraction, scheduleEditCommitCleanup],
   )
 
   const handleEditPointerUp = useCallback(
@@ -1761,42 +1781,9 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const finalVertices = useMaskEditorStore.getState().previewVertices
       const itemId = editingItemIdRef.current
       if (state?.type === 'marquee') {
-        setSelectionMarquee(null)
-        if (state.hasMoved) {
-          const marquee = getMarqueeBounds(state.startScreenPos, state.currentScreenPos)
-          const nextSelectedVertices = getVerticesInMarquee(marquee)
-          selectVertices(
-            nextSelectedVertices,
-            nextSelectedVertices[nextSelectedVertices.length - 1] ?? null,
-          )
-        } else {
-          selectVertex(null)
-        }
+        finishMarqueeDrag(state)
       } else if (state?.type === 'shape') {
-        const finalTransform = endInteraction()
-        if (finalTransform && itemId && transformChanged(state.startTransform, finalTransform)) {
-          const item = useItemsStore.getState().items.find((candidate) => candidate.id === itemId)
-          if (item?.type === 'shape' && item.shapeType === 'path') {
-            const currentFrame = usePlaybackStore.getState().currentFrame
-            const { baseTransform, autoKeyframeOperations } = buildMaskTransformPersistence(
-              item,
-              {
-                x: finalTransform.x,
-                y: finalTransform.y,
-              },
-              currentFrame,
-            )
-            commitMaskEdit(
-              itemId,
-              {
-                transform: baseTransform,
-                autoKeyframeOperations,
-              },
-              { operation: 'move' },
-            )
-          }
-        }
-        scheduleEditCommitCleanup(state.interactionId)
+        commitShapeMoveEdit(state)
       } else if (finalVertices && itemId) {
         commitVertices(finalVertices)
       } else {
@@ -1805,16 +1792,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
       dragStateRef.current = null
     },
-    [
-      buildMaskTransformPersistence,
-      commitVertices,
-      endInteraction,
-      getMarqueeBounds,
-      getVerticesInMarquee,
-      scheduleEditCommitCleanup,
-      selectVertex,
-      selectVertices,
-    ],
+    [commitShapeMoveEdit, commitVertices, finishMarqueeDrag, scheduleEditCommitCleanup],
   )
 
   const handleEditContextMenu = useCallback(
