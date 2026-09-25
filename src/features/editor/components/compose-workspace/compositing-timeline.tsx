@@ -37,7 +37,13 @@ import { useTransformParentPickWhip } from './use-transform-parent-pick-whip'
 import { buildMotionSelectionDragState, buildMotionSelectionRetimeUpdates, getMotionSelectionTimeRange } from './motion-keyframe-selection'
 import { MotionIoLane, MOTION_IO_LANE_HEIGHT } from './motion-io-lane'
 import { MotionActiveRegionOverlay, MotionCompEndRulerDim } from './motion-region-overlay'
-import { buildMotionGroupRowModel, buildMotionLayerRowModel, type LayerEntry, type MotionRow } from './motion-layer-row-model'
+import {
+  buildMotionGroupRowModel,
+  buildMotionLayerRowModel,
+  buildMotionRows,
+  type LayerEntry,
+  type MotionRow,
+} from './motion-layer-row-model'
 import { MotionLayerLane } from './motion-layer-lane'
 import { MotionLayerPropertyRows } from './motion-layer-property-rows'
 import {
@@ -901,50 +907,10 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
     },
     [],
   )
-  const motionRows = useMemo<MotionRow[]>(() => {
-    const rows: MotionRow[] = []
-    const entriesByTrackId = new Map<string, LayerEntry[]>()
-    for (const entry of layerEntries) {
-      const entries = entriesByTrackId.get(entry.item.trackId) ?? []
-      entries.push(entry)
-      entriesByTrackId.set(entry.item.trackId, entries)
-    }
-
-    const sortedTracks = [...tracks].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
-    const emittedItemIds = new Set<string>()
-    for (const track of sortedTracks.filter((candidate) => !candidate.parentTrackId)) {
-      if (track.isGroup) {
-        const childTracks = sortedTracks.filter((candidate) => candidate.parentTrackId === track.id)
-        const childItems = childTracks.flatMap((child) =>
-          (entriesByTrackId.get(child.id) ?? []).map((entry) => entry.item),
-        )
-        rows.push({ kind: 'group', track, items: childItems })
-        if (!track.isCollapsed) {
-          for (const childTrack of childTracks) {
-            for (const entry of entriesByTrackId.get(childTrack.id) ?? []) {
-              emittedItemIds.add(entry.item.id)
-              rows.push({ kind: 'layer', ...entry, depth: 1 })
-            }
-          }
-        } else {
-          childItems.forEach((item) => emittedItemIds.add(item.id))
-        }
-        continue
-      }
-
-      for (const entry of entriesByTrackId.get(track.id) ?? []) {
-        emittedItemIds.add(entry.item.id)
-        rows.push({ kind: 'layer', ...entry, depth: 0 })
-      }
-    }
-
-    for (const entry of layerEntries) {
-      if (!emittedItemIds.has(entry.item.id)) {
-        rows.push({ kind: 'layer', ...entry, depth: entry.track?.parentTrackId ? 1 : 0 })
-      }
-    }
-    return rows
-  }, [layerEntries, tracks])
+  const motionRows = useMemo<MotionRow[]>(
+    () => buildMotionRows(layerEntries, tracks),
+    [layerEntries, tracks],
+  )
   const visibleLayerIds = useMemo(
     () => motionRows.flatMap((row) => (row.kind === 'layer' ? [row.item.id] : [])),
     [motionRows],

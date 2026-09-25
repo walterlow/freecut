@@ -236,3 +236,106 @@ export function buildMotionLayerRowModel(input: MotionLayerRowModelInput): Motio
     nullObjectNonRenderingLabel: getNullObjectNonRenderingLabel(item, input.t),
   }
 }
+
+/** Track order for the row list: manual order, then id so it stays stable. */
+function compareTracksByOrder(a: TimelineTrack, b: TimelineTrack): number {
+  return a.order - b.order || a.id.localeCompare(b.id)
+}
+
+function groupLayerEntriesByTrackId(
+  layerEntries: readonly LayerEntry[],
+): Map<string, LayerEntry[]> {
+  const entriesByTrackId = new Map<string, LayerEntry[]>()
+  for (const entry of layerEntries) {
+    const entries = entriesByTrackId.get(entry.item.trackId) ?? []
+    entries.push(entry)
+    entriesByTrackId.set(entry.item.trackId, entries)
+  }
+  return entriesByTrackId
+}
+
+/**
+ * Every layer of one track, in the order its entries were collected.
+ *
+ * Rows are appended to the caller's array rather than returned so the row
+ * objects keep the exact order and identity the panes render.
+ */
+function appendTrackRows(
+  rows: MotionRow[],
+  input: {
+    track: TimelineTrack
+    entriesByTrackId: ReadonlyMap<string, LayerEntry[]>
+    emittedItemIds: Set<string>
+    depth: number
+  },
+): void {
+  const { track, entriesByTrackId, emittedItemIds, depth } = input
+  for (const entry of entriesByTrackId.get(track.id) ?? []) {
+    emittedItemIds.add(entry.item.id)
+    rows.push({ kind: 'layer', ...entry, depth })
+  }
+}
+
+/**
+ * A layer group contributes its header row, then its child tracks' layers —
+ * unless it is collapsed, in which case those layers are only marked as placed.
+ */
+function appendGroupRows(
+  rows: MotionRow[],
+  input: {
+    track: TimelineTrack
+    sortedTracks: readonly TimelineTrack[]
+    entriesByTrackId: ReadonlyMap<string, LayerEntry[]>
+    emittedItemIds: Set<string>
+  },
+): void {
+  const { track, sortedTracks, entriesByTrackId, emittedItemIds } = input
+  const childTracks = sortedTracks.filter((candidate) => candidate.parentTrackId === track.id)
+  const childItems = childTracks.flatMap((childTrack) =>
+    (entriesByTrackId.get(childTrack.id) ?? []).map((entry) => entry.item),
+  )
+  rows.push({ kind: 'group', track, items: childItems })
+  if (track.isCollapsed) {
+    childItems.forEach((item) => emittedItemIds.add(item.id))
+    return
+  }
+  for (const childTrack of childTracks) {
+    appendTrackRows(rows, { track: childTrack, entriesByTrackId, emittedItemIds, depth: 1 })
+  }
+}
+
+/** Layers whose track never made the row list still render, after the others. */
+function appendUnmatchedLayerRows(
+  rows: MotionRow[],
+  layerEntries: readonly LayerEntry[],
+  emittedItemIds: ReadonlySet<string>,
+): void {
+  for (const entry of layerEntries) {
+    if (emittedItemIds.has(entry.item.id)) continue
+    rows.push({ kind: 'layer', ...entry, depth: entry.track?.parentTrackId ? 1 : 0 })
+  }
+}
+
+/**
+ * Rows in render order: every top-level track in manual order, a layer group's
+ * children nested under its header, then any layer left over.
+ */
+export function buildMotionRows(
+  layerEntries: readonly LayerEntry[],
+  tracks: readonly TimelineTrack[],
+): MotionRow[] {
+  const entriesByTrackId = groupLayerEntriesByTrackId(layerEntries)
+  const sortedTracks = [...tracks].sort(compareTracksByOrder)
+  const emittedItemIds = new Set<string>()
+  const rows: MotionRow[] = []
+  for (const track of sortedTracks) {
+    if (track.parentTrackId) continue
+    if (track.isGroup) {
+      appendGroupRows(rows, { track, sortedTracks, entriesByTrackId, emittedItemIds })
+      continue
+    }
+    appendTrackRows(rows, { track, entriesByTrackId, emittedItemIds, depth: 0 })
+  }
+  appendUnmatchedLayerRows(rows, layerEntries, emittedItemIds)
+  return rows
+}
