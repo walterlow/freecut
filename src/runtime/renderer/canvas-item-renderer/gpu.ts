@@ -88,10 +88,16 @@ import {
   resolveGpuShapeSourceItem,
   resolveGpuShapeStyle,
 } from './gpu-participant-policy'
-import { resolveGpuShapePathVertices, resolveGpuShapeUnsupportedReason } from './gpu-shape-support-policy'
-import type { GpuShapeUnsupportedReason } from './gpu-shape-support-policy'
+import {
+  resolveGpuShapePathVertices,
+  resolveGpuShapeUnsupportedReason,
+} from './gpu-shape-support-policy'
+import type { GpuShapePathVertex, GpuShapeUnsupportedReason } from './gpu-shape-support-policy'
 
 type GpuParticipantRenderOptions = { clear?: boolean; blend?: boolean }
+
+/** Uploaded bitmap masks, keyed by the cache key of the mask they were uploaded for. */
+type GpuBitmapMaskTextureCache = Map<string, GpuBitmapMaskTextureCacheEntry>
 
 function renderGpuShapeParticipantToTexture(
   prepared: PreparedGpuMediaParticipant,
@@ -1454,12 +1460,7 @@ function areGpuSubCompMasksSupported(masks: ReadonlyArray<ActiveSubCompMask>): b
     if (mask.bitmapMask) continue
     if (hasCornerPin(mask.shape.cornerPin)) return false
     if ((mask.shape.strokeWidth ?? 0) > 0) return false
-    if (
-      mask.shape.shapeType === 'path' &&
-      !resolveGpuShapePathVertices({ ...mask.shape, pathClosed: true }, mask.transform)
-    ) {
-      return false
-    }
+    if (mask.shape.shapeType === 'path' && !resolveGpuSubCompMaskPathVertices(mask)) return false
   }
   return true
 }
@@ -1469,66 +1470,109 @@ function renderGpuSubCompMaskToTexture(
   rctx: ItemRenderContext,
   outputTexture: GPUTexture,
 ): boolean {
-  if (mask.bitmapMask) {
-    const device = rctx.gpuPipeline?.getDevice()
-    if (!device) return false
-    if (
-      outputTexture.width !== mask.bitmapMask.width ||
-      outputTexture.height !== mask.bitmapMask.height
-    ) {
-      return false
-    }
-    const cache = rctx.gpuBitmapMaskTextureCache
-    const cacheKey = cache ? getGpuBitmapMaskTextureCacheKey(mask) : null
-    const cached = cacheKey ? cache?.get(cacheKey) : undefined
-    if (cached) {
-      cache?.delete(cacheKey!)
-      cache?.set(cacheKey!, cached)
-      copyGpuTextureToTexture(device, cached.texture, outputTexture, cached.width, cached.height)
-      return true
-    }
-    if (cache && cacheKey) {
-      const cachedTexture = device.createTexture({
-        size: { width: mask.bitmapMask.width, height: mask.bitmapMask.height },
-        format: 'rgba8unorm',
-        usage:
-          GPUTextureUsage.TEXTURE_BINDING |
-          GPUTextureUsage.COPY_DST |
-          GPUTextureUsage.COPY_SRC |
-          GPUTextureUsage.RENDER_ATTACHMENT,
-      })
-      device.queue.copyExternalImageToTexture(
-        { source: mask.bitmapMask, flipY: false },
-        { texture: cachedTexture },
-        { width: mask.bitmapMask.width, height: mask.bitmapMask.height },
-      )
-      cache.set(cacheKey, {
-        texture: cachedTexture,
-        width: mask.bitmapMask.width,
-        height: mask.bitmapMask.height,
-        bytes: getGpuTextureByteSize(mask.bitmapMask.width, mask.bitmapMask.height),
-      })
-      pruneGpuBitmapMaskTextureCache(cache)
-      const latest = cache.get(cacheKey)
-      if (!latest) return false
-      copyGpuTextureToTexture(device, latest.texture, outputTexture, latest.width, latest.height)
-      return true
-    }
+  const bitmapMask = mask.bitmapMask
+  if (bitmapMask) return renderGpuBitmapMaskToTexture(mask, bitmapMask, rctx, outputTexture)
+  return renderGpuShapeMaskToTexture(mask, rctx, outputTexture)
+}
+
+/**
+ * Sub-composition masks always paint closed contours, so the mask's shape is
+ * resolved with its closure forced. `undefined` means the shader cannot flatten
+ * the authored contour into vertices.
+ */
+function resolveGpuSubCompMaskPathVertices(
+  mask: ActiveSubCompMask,
+): GpuShapePathVertex[] | undefined {
+  if (mask.shape.shapeType !== 'path') return undefined
+  return (
+    resolveGpuShapePathVertices({ ...mask.shape, pathClosed: true }, mask.transform) ?? undefined
+  )
+}
+
+/**
+ * Renders a bitmap mask: the uploaded bitmap is only reusable when the target
+ * still matches its size, and only cached while a cache exists at all.
+ */
+function renderGpuBitmapMaskToTexture(
+  mask: ActiveSubCompMask,
+  bitmapMask: OffscreenCanvas,
+  rctx: ItemRenderContext,
+  outputTexture: GPUTexture,
+): boolean {
+  const device = rctx.gpuPipeline?.getDevice()
+  if (!device) return false
+  if (outputTexture.width !== bitmapMask.width || outputTexture.height !== bitmapMask.height) {
+    return false
+  }
+  const cache = rctx.gpuBitmapMaskTextureCache
+  if (!cache) {
     device.queue.copyExternalImageToTexture(
-      { source: mask.bitmapMask, flipY: false },
+      { source: bitmapMask, flipY: false },
       { texture: outputTexture },
-      { width: mask.bitmapMask.width, height: mask.bitmapMask.height },
+      { width: bitmapMask.width, height: bitmapMask.height },
     )
     return true
   }
+  return renderCachedGpuBitmapMaskToTexture(mask, bitmapMask, cache, device, outputTexture)
+}
+
+/**
+ * Copies the cached mask texture, refreshing its recency, or uploads the bitmap
+ * into a cache-owned texture first. A prune that evicts the new entry fails the
+ * mask rather than copying a texture the cache no longer tracks.
+ */
+function renderCachedGpuBitmapMaskToTexture(
+  mask: ActiveSubCompMask,
+  bitmapMask: OffscreenCanvas,
+  cache: GpuBitmapMaskTextureCache,
+  device: GPUDevice,
+  outputTexture: GPUTexture,
+): boolean {
+  const cacheKey = getGpuBitmapMaskTextureCacheKey(mask)
+  const cached = cache.get(cacheKey)
+  if (cached) {
+    cache.delete(cacheKey)
+    cache.set(cacheKey, cached)
+    copyGpuTextureToTexture(device, cached.texture, outputTexture, cached.width, cached.height)
+    return true
+  }
+  const cachedTexture = device.createTexture({
+    size: { width: bitmapMask.width, height: bitmapMask.height },
+    format: 'rgba8unorm',
+    usage:
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.COPY_DST |
+      GPUTextureUsage.COPY_SRC |
+      GPUTextureUsage.RENDER_ATTACHMENT,
+  })
+  device.queue.copyExternalImageToTexture(
+    { source: bitmapMask, flipY: false },
+    { texture: cachedTexture },
+    { width: bitmapMask.width, height: bitmapMask.height },
+  )
+  cache.set(cacheKey, {
+    texture: cachedTexture,
+    width: bitmapMask.width,
+    height: bitmapMask.height,
+    bytes: getGpuTextureByteSize(bitmapMask.width, bitmapMask.height),
+  })
+  pruneGpuBitmapMaskTextureCache(cache)
+  const latest = cache.get(cacheKey)
+  if (!latest) return false
+  copyGpuTextureToTexture(device, latest.texture, outputTexture, latest.width, latest.height)
+  return true
+}
+
+/** Renders a shape mask as a closed white shape the composite multiplies with. */
+function renderGpuShapeMaskToTexture(
+  mask: ActiveSubCompMask,
+  rctx: ItemRenderContext,
+  outputTexture: GPUTexture,
+): boolean {
   const gpuShapePipeline = rctx.gpuShapePipeline
   if (!gpuShapePipeline) return false
-  const pathVertices =
-    mask.shape.shapeType === 'path'
-      ? resolveGpuShapePathVertices({ ...mask.shape, pathClosed: true }, mask.transform)
-      : undefined
+  const pathVertices = resolveGpuSubCompMaskPathVertices(mask)
   if (mask.shape.shapeType === 'path' && !pathVertices) return false
-  const resolvedPathVertices = pathVertices ?? undefined
   const transformRect = {
     x: rctx.canvasSettings.width / 2 + mask.transform.x - mask.transform.width / 2,
     y: rctx.canvasSettings.height / 2 + mask.transform.y - mask.transform.height / 2,
@@ -1548,7 +1592,7 @@ function renderGpuSubCompMaskToTexture(
     points: mask.shape.points,
     innerRadius: mask.shape.innerRadius,
     aspectRatioLocked: mask.shape.transform?.aspectRatioLocked,
-    pathVertices: resolvedPathVertices,
+    pathVertices,
     pathClosed: true,
     maskFeatherPixels: mask.maskType === 'alpha' ? mask.feather : 0,
     clear: true,
