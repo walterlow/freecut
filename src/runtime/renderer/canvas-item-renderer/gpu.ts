@@ -349,6 +349,172 @@ function resolvePreviewGpuEffectFallback(params: {
   return useHeldFrame ? params.heldFrame!.canvas : null
 }
 
+type PreviewGpuEffectFastPathRecorder = (
+  reason: string,
+  details?: Record<string, unknown>,
+) => void
+
+/**
+ * `true` when this call may take the DOM-video fast path: a preview frame of a
+ * video item, with the pipelines and DOM video provider that path needs. The two
+ * silent context misses stay unrecorded; the capability ones are reported.
+ */
+function canRenderPreviewGpuEffectFrame(
+  item: TimelineItem,
+  rctx: ItemRenderContext,
+  record: PreviewGpuEffectFastPathRecorder,
+): item is VideoItem {
+  if (rctx.renderMode !== 'preview') return false
+  if (item.type !== 'video') return false
+  if (!rctx.gpuPipeline) {
+    record('no-gpu-pipeline')
+    return false
+  }
+  if (!rctx.domVideoElementProvider) {
+    record('no-dom-provider')
+    return false
+  }
+  if (rctx.nonBlockingVideoFrameToleranceSeconds !== undefined) {
+    // Reverse playback should use the full item path so decoded worker frames
+    // remain the preferred source. The DOM-only fast path can otherwise splice
+    // a late nested seek between monotonic worker frames.
+    record('non-blocking-frame-delivery')
+    return false
+  }
+  return true
+}
+
+/** Reports the item-level reasons this preview frame falls back: crop or corner pin. */
+function skipPreviewGpuEffectForItem(
+  item: VideoItem,
+  record: PreviewGpuEffectFastPathRecorder,
+): boolean {
+  if (item.crop) {
+    record('crop')
+    return true
+  }
+  if (hasCornerPin(item.cornerPin)) {
+    record('corner-pin')
+    return true
+  }
+  return false
+}
+
+/**
+ * Reports the transform reasons this preview frame falls back: the DOM fast path
+ * only draws an unrotated, fully opaque, unflipped rectangle.
+ */
+function skipPreviewGpuEffectForTransform(
+  item: VideoItem,
+  transform: ItemTransform,
+  record: PreviewGpuEffectFastPathRecorder,
+): boolean {
+  if (Math.abs(transform.rotation) > 0.001) {
+    record('rotation', { rotation: transform.rotation })
+    return true
+  }
+  if (Math.abs(transform.opacity - 1) > 0.001) {
+    record('opacity', { opacity: transform.opacity })
+    return true
+  }
+  if (transform.cornerRadius > 0.001) {
+    record('corner-radius', { cornerRadius: transform.cornerRadius })
+    return true
+  }
+  if (item.transform?.flipHorizontal || item.transform?.flipVertical) {
+    record('flip')
+    return true
+  }
+  return false
+}
+
+/** The enabled effects, or `null` when they cannot run on the DOM video path. */
+function resolvePreviewGpuEffectEnabledEffects(
+  effects: ItemEffect[],
+  record: PreviewGpuEffectFastPathRecorder,
+): ItemEffect[] | null {
+  const enabledEffects = effects.filter((effect) => effect.enabled)
+  if (enabledEffects.length === 0) {
+    record('no-enabled-effects')
+    return null
+  }
+  if (enabledEffects.some((effect) => effect.effect.type !== 'gpu-effect')) {
+    record('non-gpu-effect')
+    return null
+  }
+  return enabledEffects
+}
+
+/**
+ * The DOM video frame this preview frame draws, or the canvas to return instead
+ * when there is nothing to draw: a missing or not-yet-ready element falls back to
+ * the held frame or to no frame at all.
+ */
+type PreviewGpuEffectVideoFrame =
+  | { draws: true; video: HTMLVideoElement; sourceTime: number }
+  | { draws: false; canvas: OffscreenCanvas | null }
+
+function resolvePreviewGpuEffectVideoFrame(
+  item: VideoItem,
+  frame: number,
+  rctx: ItemRenderContext,
+  heldFrame: PreviewGpuEffectFrameCacheEntry | null,
+  record: PreviewGpuEffectFastPathRecorder,
+): PreviewGpuEffectVideoFrame {
+  const video = rctx.domVideoElementProvider!(item.id)
+  const renderSpan = getItemRenderTimelineSpan(item)
+  const sourceTime = resolveVideoParticipantSourceTime(item, renderSpan, frame, rctx)
+  const speed = item.speed ?? 1
+  const decision = resolvePreviewDomVideoDrawDecision({
+    domVideo: video,
+    sourceTime,
+    speed,
+    isRenderingTransition: rctx.isRenderingTransition === true,
+  })
+  if (!video) {
+    return {
+      draws: false,
+      canvas: resolvePreviewGpuEffectFallback({
+        heldFrame,
+        shouldHold: true,
+        holdReason: 'hold-missing-dom-video',
+        missReason: 'no-dom-video',
+        record,
+      }),
+    }
+  }
+  if (!decision.shouldDraw) {
+    return {
+      draws: false,
+      canvas: resolvePreviewGpuEffectFallback({
+        heldFrame,
+        shouldHold: shouldHoldPreviewGpuEffectFrame({
+          domVideo: video,
+          sourceTime,
+          speed,
+          isRenderingTransition: rctx.isRenderingTransition === true,
+          currentFrame: frame,
+          cachedFrame: heldFrame?.frame ?? -Infinity,
+          hasCachedFrame: Boolean(heldFrame),
+          fps: rctx.fps,
+        }),
+        holdReason: 'hold-metadata-frame',
+        missReason: decision.hasReadyDomVideo ? 'dom-video-drift' : 'dom-video-not-ready',
+        details: {
+          drift: decision.drift,
+          driftThreshold: decision.driftThreshold,
+          videoTime: video.currentTime,
+          sourceTime,
+          readyState: video.readyState,
+          videoWidth: video.videoWidth,
+        },
+        record,
+      }),
+    }
+  }
+  return { draws: true, video, sourceTime }
+}
+
 export function renderPreviewVideoGpuEffectsToCanvas(
   item: TimelineItem,
   transform: ItemTransform,
@@ -381,105 +547,23 @@ export function renderPreviewVideoGpuEffectsToCanvas(
     stats.last = { reason, itemId: item.id, frame, ...details }
   }
 
-  if (rctx.renderMode !== 'preview') return null
-  if (item.type !== 'video') return null
-  if (!rctx.gpuPipeline) {
-    recordFastPath('no-gpu-pipeline')
-    return null
-  }
-  if (!rctx.domVideoElementProvider) {
-    recordFastPath('no-dom-provider')
-    return null
-  }
-  if (rctx.nonBlockingVideoFrameToleranceSeconds !== undefined) {
-    // Reverse playback should use the full item path so decoded worker frames
-    // remain the preferred source. The DOM-only fast path can otherwise splice
-    // a late nested seek between monotonic worker frames.
-    recordFastPath('non-blocking-frame-delivery')
-    return null
-  }
-  if (item.crop) {
-    recordFastPath('crop')
-    return null
-  }
-  if (hasCornerPin(item.cornerPin)) {
-    recordFastPath('corner-pin')
-    return null
-  }
-  if (Math.abs(transform.rotation) > 0.001) {
-    recordFastPath('rotation', { rotation: transform.rotation })
-    return null
-  }
-  if (Math.abs(transform.opacity - 1) > 0.001) {
-    recordFastPath('opacity', { opacity: transform.opacity })
-    return null
-  }
-  if (transform.cornerRadius > 0.001) {
-    recordFastPath('corner-radius', { cornerRadius: transform.cornerRadius })
-    return null
-  }
-  if (item.transform?.flipHorizontal || item.transform?.flipVertical) {
-    recordFastPath('flip')
-    return null
-  }
-
-  const enabledEffects = effects.filter((effect) => effect.enabled)
-  if (enabledEffects.length === 0) {
-    recordFastPath('no-enabled-effects')
-    return null
-  }
-  if (enabledEffects.some((effect) => effect.effect.type !== 'gpu-effect')) {
-    recordFastPath('non-gpu-effect')
-    return null
-  }
+  if (!canRenderPreviewGpuEffectFrame(item, rctx, recordFastPath)) return null
+  if (skipPreviewGpuEffectForItem(item, recordFastPath)) return null
+  if (skipPreviewGpuEffectForTransform(item, transform, recordFastPath)) return null
+  const enabledEffects = resolvePreviewGpuEffectEnabledEffects(effects, recordFastPath)
+  if (!enabledEffects) return null
 
   const frameCache = getPreviewGpuEffectFrameCache(rctx)
   const heldFrame = getFreshPreviewGpuEffectFrame(rctx, item.id, frame)
-  const video = rctx.domVideoElementProvider(item.id)
-  const renderSpan = getItemRenderTimelineSpan(item)
-  const sourceTime = resolveVideoParticipantSourceTime(item, renderSpan, frame, rctx)
-  const speed = item.speed ?? 1
-  const decision = resolvePreviewDomVideoDrawDecision({
-    domVideo: video,
-    sourceTime,
-    speed,
-    isRenderingTransition: rctx.isRenderingTransition === true,
-  })
-  if (!video) {
-    return resolvePreviewGpuEffectFallback({
-      heldFrame,
-      shouldHold: true,
-      holdReason: 'hold-missing-dom-video',
-      missReason: 'no-dom-video',
-      record: recordFastPath,
-    })
-  }
-  if (!decision.shouldDraw) {
-    return resolvePreviewGpuEffectFallback({
-      heldFrame,
-      shouldHold: shouldHoldPreviewGpuEffectFrame({
-        domVideo: video,
-        sourceTime,
-        speed,
-        isRenderingTransition: rctx.isRenderingTransition === true,
-        currentFrame: frame,
-        cachedFrame: heldFrame?.frame ?? -Infinity,
-        hasCachedFrame: Boolean(heldFrame),
-        fps: rctx.fps,
-      }),
-      holdReason: 'hold-metadata-frame',
-      missReason: decision.hasReadyDomVideo ? 'dom-video-drift' : 'dom-video-not-ready',
-      details: {
-        drift: decision.drift,
-        driftThreshold: decision.driftThreshold,
-        videoTime: video.currentTime,
-        sourceTime,
-        readyState: video.readyState,
-        videoWidth: video.videoWidth,
-      },
-      record: recordFastPath,
-    })
-  }
+  const videoFrame = resolvePreviewGpuEffectVideoFrame(
+    item,
+    frame,
+    rctx,
+    heldFrame,
+    recordFastPath,
+  )
+  if (!videoFrame.draws) return videoFrame.canvas
+  const { video, sourceTime } = videoFrame
 
   const drawLayout = calculateContainedMediaDrawLayout(
     video.videoWidth,
@@ -494,7 +578,7 @@ export function renderPreviewVideoGpuEffectsToCanvas(
   }
 
   try {
-    const canvas = rctx.gpuPipeline.applyEffectsToVideo(
+    const canvas = rctx.gpuPipeline!.applyEffectsToVideo(
       video,
       getGpuEffectInstances(enabledEffects, frame / rctx.fps),
       drawLayout.mediaRect,
