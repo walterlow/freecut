@@ -66,7 +66,7 @@ export function parseGpuColor(color: string): GpuShapeColor | null {
  * An open custom path cannot be filled, and stroke-only shapes are the norm
  * for them; every other shape keeps its authored fill setting.
  */
-function isGpuShapeFillEnabled(shape: ShapeItem): boolean {
+export function isGpuShapeFillEnabled(shape: ShapeItem): boolean {
   if (shape.shapeType === 'path' && shape.pathClosed === false) return false
   return shape.fillEnabled ?? true
 }

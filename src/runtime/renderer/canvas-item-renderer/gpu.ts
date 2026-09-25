@@ -26,7 +26,6 @@ import { resolveAnimatedTextItem } from '@/runtime/renderer/deps/keyframes-contr
 import type { GpuTexturePool } from '@/infrastructure/gpu-compositor'
 import type { GpuMediaRect, GpuMediaRenderParams } from '@/infrastructure/gpu-media'
 import { isTextMotionActive } from '@/shared/typography/text-motion'
-import { resolveShapeLinearGradient } from '@/shared/graphics/shapes/linear-gradient'
 import { recordPreviewVideoSource } from '@/shared/logging/preview-scrub-performance'
 import {
   getCanvasRenderScale,
@@ -85,12 +84,12 @@ import {
 } from './gpu-subcomp-children-policy'
 import {
   canUseGpuVideoExtractorSource,
-  parseGpuColor,
   resolveGpuDomVideoDrawDecision,
   resolveGpuShapeSourceItem,
   resolveGpuShapeStyle,
 } from './gpu-participant-policy'
-import { resolveGpuShapePathVertices } from './gpu-shape-support-policy'
+import { resolveGpuShapePathVertices, resolveGpuShapeUnsupportedReason } from './gpu-shape-support-policy'
+import type { GpuShapeUnsupportedReason } from './gpu-shape-support-policy'
 
 type GpuParticipantRenderOptions = { clear?: boolean; blend?: boolean }
 
@@ -1430,54 +1429,23 @@ function releaseGpuScratchTexture(rctx: ItemRenderContext, texture: GPUTexture):
   texture.destroy()
 }
 
-// fallow-ignore-next-line complexity
+/**
+ * The GpuShapeUnsupportedReason of a shape, or `null` when the GPU shape
+ * pipeline can draw it. The ladder itself is the pure policy in
+ * `gpu-shape-support-policy.ts`; this wrapper contributes the render context's
+ * capabilities.
+ */
 export function getGpuShapeUnsupportedReason(
   shape: ShapeItem,
   transform: ItemTransform,
   effects: TimelineItem['effects'] = [],
   rctx: ItemRenderContext,
-): string | null {
-  if (!rctx.gpuShapePipeline) return 'shape-pipeline-unavailable'
-  if (shape.isMask) return 'shape-mask'
-  if (shape.shapeType === 'path' && !resolveGpuShapePathVertices(shape, transform)) {
-    return 'unsupported-path-complexity'
-  }
-  if (
-    shape.shapeType === 'path' &&
-    shape.strokeEnabled !== false &&
-    (shape.strokeWidth ?? 0) > 0 &&
-    ((shape.strokeLineCap ?? 'butt') !== 'round' || (shape.strokeLineJoin ?? 'miter') !== 'round')
-  ) {
-    return 'unsupported-path-stroke-style'
-  }
-  if (
-    shape.shapeType !== 'path' &&
-    ((shape.trimPathStart ?? 0) !== 0 || (shape.trimPathEnd ?? 100) !== 100)
-  ) {
-    return 'canvas-trim-path-metrics-required'
-  }
-  const fillEnabled =
-    shape.shapeType === 'path' && shape.pathClosed === false ? false : shape.fillEnabled !== false
-  if (fillEnabled) {
-    const linearGradient = resolveShapeLinearGradient(shape)
-    if (
-      !parseGpuColor(linearGradient?.startColor ?? shape.fillColor) ||
-      (linearGradient && !parseGpuColor(linearGradient.endColor))
-    ) {
-      return 'unsupported-shape-fill'
-    }
-  }
-  if (
-    shape.strokeEnabled !== false &&
-    shape.strokeWidth &&
-    shape.strokeWidth > 0 &&
-    shape.strokeColor &&
-    !parseGpuColor(shape.strokeColor)
-  ) {
-    return 'unsupported-shape-stroke'
-  }
-  if (effects.length > 0 && !rctx.gpuPipeline) return 'gpu-effects-pipeline-unavailable'
-  return null
+): GpuShapeUnsupportedReason | null {
+  return resolveGpuShapeUnsupportedReason(shape, transform, {
+    hasShapePipeline: Boolean(rctx.gpuShapePipeline),
+    hasEffectsPipeline: Boolean(rctx.gpuPipeline),
+    hasEffects: effects.length > 0,
+  })
 }
 
 function areGpuSubCompMasksSupported(masks: ReadonlyArray<ActiveSubCompMask>): boolean {

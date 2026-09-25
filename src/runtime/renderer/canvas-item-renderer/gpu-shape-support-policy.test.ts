@@ -3,9 +3,16 @@
 import { describe, expect, it } from 'vite-plus/test'
 import type { MaskVertex } from '@/types/masks'
 import type { ShapeItem } from '@/types/timeline'
+import type { ItemEffect } from '@/types/effects'
 import { flattenBezierPath } from '@/shared/graphics/shapes/bezier-path'
+import { resolveShapeLinearGradient } from '@/shared/graphics/shapes/linear-gradient'
 import { MAX_GPU_SHAPE_PATH_VERTICES } from '@/infrastructure/gpu-shapes'
-import { resolveGpuShapePathVertices } from './gpu-shape-support-policy'
+import { parseGpuColor } from './gpu-participant-policy'
+import {
+  resolveGpuShapePathVertices,
+  resolveGpuShapeUnsupportedReason,
+} from './gpu-shape-support-policy'
+import type { GpuShapeUnsupportedReason } from './gpu-shape-support-policy'
 import type { ItemTransform } from './types'
 
 type GpuShapePathMutation =
@@ -358,6 +365,388 @@ describe('resolveGpuShapePathVertices', () => {
           !sameVertices(
             resolveGpuShapePathVertices(shape, transform),
             resolveGpuShapePathVerticesOracle(shape, transform, mutation),
+          ),
+      )
+      expect({ mutation, drifted }).toEqual({ mutation, drifted: true })
+    }
+  })
+})
+
+type GpuShapeReasonMutation =
+  | 'none'
+  /** Checks only the path stroke's cap, so an unrounded join slips through. */
+  | 'path-stroke-cap-only'
+  /** Ignores the stroke width, so an invisible stroke is rejected as unparseable. */
+  | 'stroke-width-ignored'
+  /** Applies the trim-metric rule to path shapes too, pre-empting their reasons. */
+  | 'trim-paths-too'
+  /** Drops the effects-pipeline rule, so GPU effects are assumed renderable. */
+  | 'effects-gap-ignored'
+
+interface GpuShapeSupportFixture {
+  hasShapePipeline: boolean
+  hasEffectsPipeline: boolean
+}
+
+/**
+ * Verbatim copy of the rejection ladder `getGpuShapeUnsupportedReason` ran inline in
+ * `gpu.ts` before the move, narrowed to the two render-context capabilities it read
+ * and parameterized by one deliberate defect at a time. The path resolver below is
+ * the extracted one: the path tests in this file already pin it to the inline code,
+ * so this oracle only has to prove the ladder itself.
+ */
+function gpuShapeUnsupportedReasonOracle(
+  shape: ShapeItem,
+  transform: ItemTransform,
+  effects: readonly ItemEffect[],
+  fixture: GpuShapeSupportFixture,
+  mutation: GpuShapeReasonMutation,
+): GpuShapeUnsupportedReason | null {
+  if (!fixture.hasShapePipeline) return 'shape-pipeline-unavailable'
+  if (shape.isMask) return 'shape-mask'
+  if (shape.shapeType === 'path' && !resolveGpuShapePathVertices(shape, transform)) {
+    return 'unsupported-path-complexity'
+  }
+  const strokeCap = shape.strokeLineCap ?? 'butt'
+  const strokeJoin = shape.strokeLineJoin ?? 'miter'
+  if (
+    shape.shapeType === 'path' &&
+    shape.strokeEnabled !== false &&
+    (shape.strokeWidth ?? 0) > 0 &&
+    (mutation === 'path-stroke-cap-only'
+      ? strokeCap !== 'round'
+      : strokeCap !== 'round' || strokeJoin !== 'round')
+  ) {
+    return 'unsupported-path-stroke-style'
+  }
+  if (
+    (mutation === 'trim-paths-too' || shape.shapeType !== 'path') &&
+    ((shape.trimPathStart ?? 0) !== 0 || (shape.trimPathEnd ?? 100) !== 100)
+  ) {
+    return 'canvas-trim-path-metrics-required'
+  }
+  const fillEnabled =
+    shape.shapeType === 'path' && shape.pathClosed === false ? false : shape.fillEnabled !== false
+  if (fillEnabled) {
+    const linearGradient = resolveShapeLinearGradient(shape)
+    if (
+      !parseGpuColor(linearGradient?.startColor ?? shape.fillColor) ||
+      (linearGradient && !parseGpuColor(linearGradient.endColor))
+    ) {
+      return 'unsupported-shape-fill'
+    }
+  }
+  const strokeIsVisible =
+    mutation === 'stroke-width-ignored'
+      ? shape.strokeEnabled !== false
+      : shape.strokeEnabled !== false && (shape.strokeWidth ?? 0) > 0
+  if (strokeIsVisible && shape.strokeColor && !parseGpuColor(shape.strokeColor)) {
+    return 'unsupported-shape-stroke'
+  }
+  if (mutation !== 'effects-gap-ignored' && effects.length > 0 && !fixture.hasEffectsPipeline) {
+    return 'gpu-effects-pipeline-unavailable'
+  }
+  return null
+}
+
+const OPTIONAL_BOOLEANS = [undefined, true, false] as const
+const SUPPORT_SHAPE_TYPES = ['rectangle', 'path', 'ellipse', 'polygon'] as const
+const STROKE_WIDTHS = [undefined, 0, 1, 4, -4, Number.NaN] as const
+const LINE_CAPS = [undefined, 'butt', 'round', 'square'] as const
+const LINE_JOINS = [undefined, 'miter', 'round', 'bevel'] as const
+const TRIM_STARTS = [undefined, 0, 25, -1] as const
+const TRIM_ENDS = [undefined, 100, 50, 0] as const
+const COLOR_STRINGS = ['#112233', '#abc', 'rgba(1,2,3,0.5)', 'bogus', ''] as const
+const OPTIONAL_COLORS = [undefined, ...COLOR_STRINGS] as const
+const FILL_TYPES = [undefined, 'solid', 'linear'] as const
+
+const GPU_EFFECTS = [
+  { id: 'effect-1', enabled: true, effect: { type: 'gpu-effect', params: {} } },
+] as unknown as ItemEffect[]
+const EFFECT_SETS: ReadonlyArray<ItemEffect[]> = [[], GPU_EFFECTS]
+
+const SUPPORT_PATH_VERTEX_SETS: ReadonlyArray<MaskVertex[] | undefined> = [
+  undefined,
+  [],
+  [straightVertex(0, 2), straightVertex(1, 2)],
+  [straightVertex(0, 3), straightVertex(1, 3), straightVertex(2, 3)],
+  Array.from({ length: MAX_GPU_SHAPE_PATH_VERTICES + 8 }, (_, index) =>
+    zigzagVertex(index, MAX_GPU_SHAPE_PATH_VERTICES + 8),
+  ),
+]
+
+interface GeneratedSupportCase {
+  shape: ShapeItem
+  transform: ItemTransform
+  effects: ItemEffect[]
+  fixture: GpuShapeSupportFixture
+}
+
+function makeGeneratedSupportShape(random: () => number): ShapeItem {
+  return {
+    ...BASE_SHAPE,
+    shapeType: pick(random, SUPPORT_SHAPE_TYPES),
+    isMask: pick(random, [undefined, true, false]),
+    pathClosed: pick(random, [undefined, true, false]),
+    pathVertices: pick(random, SUPPORT_PATH_VERTEX_SETS),
+    fillType: pick(random, FILL_TYPES),
+    fillEnabled: pick(random, OPTIONAL_BOOLEANS),
+    fillColor: pick(random, COLOR_STRINGS),
+    gradientStartColor: pick(random, OPTIONAL_COLORS),
+    gradientEndColor: pick(random, OPTIONAL_COLORS),
+    strokeEnabled: pick(random, OPTIONAL_BOOLEANS),
+    strokeWidth: pick(random, STROKE_WIDTHS),
+    strokeColor: pick(random, OPTIONAL_COLORS),
+    strokeLineCap: pick(random, LINE_CAPS),
+    strokeLineJoin: pick(random, LINE_JOINS),
+    trimPathStart: pick(random, TRIM_STARTS),
+    trimPathEnd: pick(random, TRIM_ENDS),
+  }
+}
+
+const GENERATED_SUPPORT_CASES: GeneratedSupportCase[] = (() => {
+  const random = createSeededRandom(0x5eed_2)
+  const cases: GeneratedSupportCase[] = []
+  for (let index = 0; index < 700; index++) {
+    cases.push({
+      shape: makeGeneratedSupportShape(random),
+      transform: {
+        ...BASE_TRANSFORM,
+        width: pick(random, [1, 320, 200]),
+        height: pick(random, [1, 180, 100]),
+      },
+      effects: pick(random, EFFECT_SETS),
+      fixture: {
+        hasShapePipeline: pick(random, [true, true, false]),
+        hasEffectsPipeline: pick(random, [true, true, false]),
+      },
+    })
+  }
+  return cases
+})()
+
+interface ExplicitSupportCaseInput {
+  shape: ShapeItem
+  fixture: GpuShapeSupportFixture
+  effects?: ItemEffect[]
+}
+
+/** Hand-picked shapes, one per rule of the ladder, in the order the ladder reads them. */
+const explicitSupportInputs: ExplicitSupportCaseInput[] = [
+  {
+    // The pipeline gate outranks the mask rule.
+    shape: { ...BASE_SHAPE, shapeType: 'rectangle', isMask: true },
+    fixture: { hasShapePipeline: false, hasEffectsPipeline: true },
+  },
+  {
+    shape: { ...BASE_SHAPE, shapeType: 'rectangle', isMask: true },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+  {
+    shape: { ...BASE_SHAPE, shapeType: 'path', pathVertices: undefined },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+  {
+    // A path whose stroke is not round-capped needs the canvas stroke metrics.
+    shape: {
+      ...BASE_SHAPE,
+      shapeType: 'path',
+      strokeEnabled: true,
+      strokeWidth: 4,
+      strokeLineCap: 'butt',
+      strokeLineJoin: 'round',
+      pathVertices: [straightVertex(0, 3), straightVertex(1, 3), straightVertex(2, 3)],
+    },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+  {
+    shape: {
+      ...BASE_SHAPE,
+      shapeType: 'path',
+      strokeEnabled: true,
+      strokeWidth: 4,
+      strokeLineCap: 'round',
+      strokeLineJoin: 'round',
+      pathVertices: [straightVertex(0, 3), straightVertex(1, 3), straightVertex(2, 3)],
+    },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+  {
+    shape: { ...BASE_SHAPE, shapeType: 'rectangle', trimPathStart: 10 },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+  {
+    shape: { ...BASE_SHAPE, shapeType: 'rectangle', fillColor: 'bogus' },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+  {
+    // The fill rule fires before the effects rule, even with both broken.
+    shape: { ...BASE_SHAPE, shapeType: 'rectangle', fillColor: 'bogus' },
+    effects: GPU_EFFECTS,
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: false },
+  },
+  {
+    // An open path cannot be filled, so its unparseable fill is never reached.
+    shape: {
+      ...BASE_SHAPE,
+      shapeType: 'path',
+      pathClosed: false,
+      fillColor: 'bogus',
+      pathVertices: [straightVertex(0, 3), straightVertex(1, 3), straightVertex(2, 3)],
+    },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+  {
+    shape: {
+      ...BASE_SHAPE,
+      shapeType: 'rectangle',
+      strokeEnabled: true,
+      strokeWidth: 2,
+      strokeColor: 'bogus',
+    },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+  {
+    // A zero-width stroke paints nothing, so its color is never parsed.
+    shape: {
+      ...BASE_SHAPE,
+      shapeType: 'rectangle',
+      strokeEnabled: true,
+      strokeWidth: 0,
+      strokeColor: 'bogus',
+    },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+  {
+    shape: { ...BASE_SHAPE, shapeType: 'rectangle' },
+    effects: GPU_EFFECTS,
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: false },
+  },
+  {
+    // A NaN width is not a painted stroke either; `!== 0` guards would regress here.
+    shape: {
+      ...BASE_SHAPE,
+      shapeType: 'rectangle',
+      strokeEnabled: true,
+      strokeWidth: Number.NaN,
+      strokeColor: 'bogus',
+    },
+    fixture: { hasShapePipeline: true, hasEffectsPipeline: true },
+  },
+]
+
+const EXPLICIT_SUPPORT_CASES: GeneratedSupportCase[] = explicitSupportInputs.map((input) => ({
+  shape: input.shape,
+  transform: BASE_TRANSFORM,
+  effects: input.effects ?? [],
+  fixture: input.fixture,
+}))
+
+const ALL_SUPPORT_CASES = [...EXPLICIT_SUPPORT_CASES, ...GENERATED_SUPPORT_CASES]
+const REASON_MUTATIONS = [
+  'path-stroke-cap-only',
+  'stroke-width-ignored',
+  'trim-paths-too',
+  'effects-gap-ignored',
+] as const
+
+function resolveSupportedReason(entry: GeneratedSupportCase): GpuShapeUnsupportedReason | null {
+  return resolveGpuShapeUnsupportedReason(entry.shape, entry.transform, {
+    hasShapePipeline: entry.fixture.hasShapePipeline,
+    hasEffectsPipeline: entry.fixture.hasEffectsPipeline,
+    hasEffects: entry.effects.length > 0,
+  })
+}
+
+describe('resolveGpuShapeUnsupportedReason', () => {
+  it('matches the inline rejection ladder it replaced across generated shapes', () => {
+    for (const entry of ALL_SUPPORT_CASES) {
+      expect(resolveSupportedReason(entry)).toEqual(
+        gpuShapeUnsupportedReasonOracle(
+          entry.shape,
+          entry.transform,
+          entry.effects,
+          entry.fixture,
+          'none',
+        ),
+      )
+    }
+  })
+
+  it('exercises every rejection reason and the renderable shape', () => {
+    const counts: Record<string, number> = {}
+    for (const entry of ALL_SUPPORT_CASES) {
+      const reason = String(resolveSupportedReason(entry))
+      counts[reason] = (counts[reason] ?? 0) + 1
+    }
+    // toEqual fixes the key set, so a corpus that stopped reaching one of the
+    // ladder's rules would drop its reason here.
+    expect(counts).toEqual({
+      null: expect.any(Number),
+      'canvas-trim-path-metrics-required': expect.any(Number),
+      'gpu-effects-pipeline-unavailable': expect.any(Number),
+      'shape-mask': expect.any(Number),
+      'shape-pipeline-unavailable': expect.any(Number),
+      'unsupported-path-complexity': expect.any(Number),
+      'unsupported-path-stroke-style': expect.any(Number),
+      'unsupported-shape-fill': expect.any(Number),
+      'unsupported-shape-stroke': expect.any(Number),
+    })
+  })
+
+  it('reports the first reason in pipeline order', () => {
+    const expectations: Array<[number, GpuShapeUnsupportedReason | null]> = [
+      [0, 'shape-pipeline-unavailable'],
+      [1, 'shape-mask'],
+      [2, 'unsupported-path-complexity'],
+      [3, 'unsupported-path-stroke-style'],
+      [4, null],
+      [5, 'canvas-trim-path-metrics-required'],
+      [6, 'unsupported-shape-fill'],
+      [7, 'unsupported-shape-fill'],
+      [8, null],
+      [9, 'unsupported-shape-stroke'],
+      [10, null],
+      [11, 'gpu-effects-pipeline-unavailable'],
+      [12, null],
+    ]
+    for (const [index, expected] of expectations) {
+      expect(resolveSupportedReason(EXPLICIT_SUPPORT_CASES[index]!)).toBe(expected)
+    }
+  })
+
+  it('keeps an open path fillable-only-when-closed rule out of the rejection', () => {
+    const openPath: ShapeItem = {
+      ...BASE_SHAPE,
+      shapeType: 'path',
+      pathClosed: false,
+      fillEnabled: true,
+      fillColor: 'bogus',
+      pathVertices: [straightVertex(0, 3), straightVertex(1, 3), straightVertex(2, 3)],
+    }
+    expect(resolveGpuShapeUnsupportedReason(openPath, BASE_TRANSFORM, {
+      hasShapePipeline: true,
+      hasEffectsPipeline: true,
+      hasEffects: false,
+    })).toBeNull()
+    expect(resolveGpuShapeUnsupportedReason({ ...openPath, pathClosed: true }, BASE_TRANSFORM, {
+      hasShapePipeline: true,
+      hasEffectsPipeline: true,
+      hasEffects: false,
+    })).toBe('unsupported-shape-fill')
+  })
+
+  it('detects a drifted ladder, so the oracle comparison can fail', () => {
+    for (const mutation of REASON_MUTATIONS) {
+      const drifted = ALL_SUPPORT_CASES.some(
+        (entry) =>
+          resolveSupportedReason(entry) !==
+          gpuShapeUnsupportedReasonOracle(
+            entry.shape,
+            entry.transform,
+            entry.effects,
+            entry.fixture,
+            mutation,
           ),
       )
       expect({ mutation, drifted }).toEqual({ mutation, drifted: true })

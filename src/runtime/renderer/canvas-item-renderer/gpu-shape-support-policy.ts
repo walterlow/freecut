@@ -1,15 +1,18 @@
 /**
- * Pure path policy for the GPU shape pipeline (`gpu.ts`): the canvas-space
- * vertices the shape shader consumes for an authored bezier path. Nothing here
- * touches a `GPUTexture`, a pipeline or a render context, so the flatten /
- * closure-trim / resample ladder can be unit tested without a device; texture
- * uploads and the pipeline calls stay in `gpu.ts`.
+ * Pure support policy for the GPU shape pipeline (`gpu.ts`): the canvas-space
+ * vertices the shape shader consumes for an authored bezier path, and why a
+ * shape cannot be drawn by that pipeline at all. Nothing here touches a
+ * `GPUTexture`, a pipeline or a render context, so the flatten / closure-trim /
+ * resample ladder and the rejection ladder can be unit tested without a device;
+ * texture uploads and the pipeline calls stay in `gpu.ts`.
  */
 
 import type { ShapeItem } from '@/types/timeline'
 import type { FlattenedPathPoint } from '@/shared/graphics/shapes/bezier-path'
 import { flattenBezierPath } from '@/shared/graphics/shapes/bezier-path'
+import { resolveShapeLinearGradient } from '@/shared/graphics/shapes/linear-gradient'
 import { MAX_GPU_SHAPE_PATH_VERTICES } from '@/infrastructure/gpu-shapes'
+import { isGpuShapeFillEnabled, parseGpuColor } from './gpu-participant-policy'
 import type { ItemTransform } from './types'
 
 /** One shader vertex: canvas-centred x/y plus the progress the taper metrics read. */
@@ -100,4 +103,144 @@ export function resolveGpuShapePathVertices(
     )
   }
   return resampleGpuShapePathVertices(metricPoints, closed, transform)
+}
+
+/** Why the GPU shape pipeline cannot draw a shape; the caller falls back to canvas. */
+export type GpuShapeUnsupportedReason =
+  | 'shape-pipeline-unavailable'
+  | 'shape-mask'
+  | 'unsupported-path-complexity'
+  | 'unsupported-path-stroke-style'
+  | 'canvas-trim-path-metrics-required'
+  | 'unsupported-shape-fill'
+  | 'unsupported-shape-stroke'
+  | 'gpu-effects-pipeline-unavailable'
+
+/** The capabilities the render context contributes to the decision. */
+export interface GpuShapeSupportFlags {
+  hasShapePipeline: boolean
+  hasEffectsPipeline: boolean
+  /** The item carries effects at all, enabled or not. */
+  hasEffects: boolean
+}
+
+/** The authored stroke with the shader's defaults applied. */
+interface GpuShapeStrokeParams {
+  enabled: boolean
+  width: number
+  lineCap: string
+  lineJoin: string
+  color: string | undefined
+}
+
+function resolveGpuShapeStrokeParams(shape: ShapeItem): GpuShapeStrokeParams {
+  return {
+    enabled: shape.strokeEnabled !== false,
+    width: shape.strokeWidth ?? 0,
+    lineCap: shape.strokeLineCap ?? 'butt',
+    lineJoin: shape.strokeLineJoin ?? 'miter',
+    color: shape.strokeColor,
+  }
+}
+
+/**
+ * The fill the shader reads off the shape: a linear fill needs both of its
+ * gradient colors parseable, a solid fill only its fill color.
+ */
+function hasParseableGpuShapeFill(shape: ShapeItem): boolean {
+  const linearGradient = resolveShapeLinearGradient(shape)
+  if (!linearGradient) return parseGpuColor(shape.fillColor) !== null
+  return (
+    parseGpuColor(linearGradient.startColor) !== null &&
+    parseGpuColor(linearGradient.endColor) !== null
+  )
+}
+
+/**
+ * A stroked path only renders directly with rounded caps and joins; any other
+ * cap or join needs the canvas renderer's stroke metrics.
+ */
+function resolveGpuShapePathStrokeGap(
+  stroke: GpuShapeStrokeParams,
+): GpuShapeUnsupportedReason | null {
+  if (!stroke.enabled) return null
+  // Only a positive width paints; a zero, negative or NaN width has no stroke to style.
+  if (!(stroke.width > 0)) return null
+  if (stroke.lineCap === 'round' && stroke.lineJoin === 'round') return null
+  return 'unsupported-path-stroke-style'
+}
+
+/** A visible stroke color the shader cannot parse is a hard rejection. */
+function resolveGpuShapeStrokePaintGap(
+  stroke: GpuShapeStrokeParams,
+): GpuShapeUnsupportedReason | null {
+  if (!stroke.enabled) return null
+  // Only a positive width paints; a zero, negative or NaN width has no stroke to check.
+  if (!(stroke.width > 0)) return null
+  if (!stroke.color) return null
+  if (parseGpuColor(stroke.color) !== null) return null
+  return 'unsupported-shape-stroke'
+}
+
+function resolveGpuShapePipelineGap(
+  shape: ShapeItem,
+  flags: GpuShapeSupportFlags,
+): GpuShapeUnsupportedReason | null {
+  if (!flags.hasShapePipeline) return 'shape-pipeline-unavailable'
+  if (shape.isMask) return 'shape-mask'
+  return null
+}
+
+/**
+ * Path only: the authored contour has to flatten into shader vertices, and a
+ * stroked path has to be round-capped, before the pipeline can draw it.
+ */
+function resolveGpuShapePathGap(
+  shape: ShapeItem,
+  transform: ItemTransform,
+): GpuShapeUnsupportedReason | null {
+  if (shape.shapeType !== 'path') return null
+  if (!resolveGpuShapePathVertices(shape, transform)) return 'unsupported-path-complexity'
+  return resolveGpuShapePathStrokeGap(resolveGpuShapeStrokeParams(shape))
+}
+
+/** Trim metrics are canvas-only: a trimmed non-path shape must not render directly. */
+function resolveGpuShapeTrimGap(shape: ShapeItem): GpuShapeUnsupportedReason | null {
+  if (shape.shapeType === 'path') return null
+  if ((shape.trimPathStart ?? 0) === 0 && (shape.trimPathEnd ?? 100) === 100) return null
+  return 'canvas-trim-path-metrics-required'
+}
+
+function resolveGpuShapePaintGap(shape: ShapeItem): GpuShapeUnsupportedReason | null {
+  if (isGpuShapeFillEnabled(shape) && !hasParseableGpuShapeFill(shape)) {
+    return 'unsupported-shape-fill'
+  }
+  return resolveGpuShapeStrokePaintGap(resolveGpuShapeStrokeParams(shape))
+}
+
+function resolveGpuShapeEffectsGap(
+  flags: GpuShapeSupportFlags,
+): GpuShapeUnsupportedReason | null {
+  if (!flags.hasEffects) return null
+  if (flags.hasEffectsPipeline) return null
+  return 'gpu-effects-pipeline-unavailable'
+}
+
+/**
+ * The first reason the GPU shape pipeline cannot draw this shape, in pipeline
+ * order, or `null` when it can. The order is the diagnostic's contract: the
+ * caller reports the returned reason next to the fallback it chose.
+ */
+export function resolveGpuShapeUnsupportedReason(
+  shape: ShapeItem,
+  transform: ItemTransform,
+  flags: GpuShapeSupportFlags,
+): GpuShapeUnsupportedReason | null {
+  return (
+    resolveGpuShapePipelineGap(shape, flags) ??
+    resolveGpuShapePathGap(shape, transform) ??
+    resolveGpuShapeTrimGap(shape) ??
+    resolveGpuShapePaintGap(shape) ??
+    resolveGpuShapeEffectsGap(flags)
+  )
 }
