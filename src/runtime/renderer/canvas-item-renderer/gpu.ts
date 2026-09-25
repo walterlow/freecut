@@ -25,9 +25,7 @@ import {
 import { resolveAnimatedTextItem } from '@/runtime/renderer/deps/keyframes-contract'
 import type { GpuTexturePool } from '@/infrastructure/gpu-compositor'
 import type { GpuMediaRect, GpuMediaRenderParams } from '@/infrastructure/gpu-media'
-import { MAX_GPU_SHAPE_PATH_VERTICES } from '@/infrastructure/gpu-shapes'
 import { isTextMotionActive } from '@/shared/typography/text-motion'
-import { flattenBezierPath } from '@/shared/graphics/shapes/bezier-path'
 import { resolveShapeLinearGradient } from '@/shared/graphics/shapes/linear-gradient'
 import { recordPreviewVideoSource } from '@/shared/logging/preview-scrub-performance'
 import {
@@ -92,6 +90,7 @@ import {
   resolveGpuShapeSourceItem,
   resolveGpuShapeStyle,
 } from './gpu-participant-policy'
+import { resolveGpuShapePathVertices } from './gpu-shape-support-policy'
 
 type GpuParticipantRenderOptions = { clear?: boolean; blend?: boolean }
 
@@ -1724,50 +1723,6 @@ function resolveGpuMediaCornerPin(
     height: mediaRect.height,
     inverseMatrix,
   }
-}
-
-// fallow-ignore-next-line complexity
-function resolveGpuShapePathVertices(
-  shape: ShapeItem,
-  transform: ItemTransform,
-): Array<[number, number, number?]> | null {
-  const vertices = shape.pathVertices
-  const closed = shape.pathClosed ?? true
-  if (!vertices || vertices.length < (closed ? 3 : 2)) return null
-  const flattened = flattenBezierPath(vertices, transform.width, transform.height, closed)
-  const metricPoints = flattened.points
-  let points = metricPoints
-  if (closed && points.length > 1 && points.at(-1)?.progress === 1) points = points.slice(0, -1)
-  if (points.length < (closed ? 3 : 2)) return null
-
-  const sampleAtProgress = (progress: number): [number, number, number] => {
-    const nextIndex = metricPoints.findIndex((point) => point.progress >= progress)
-    if (nextIndex <= 0) {
-      const point = metricPoints[0]!
-      return [point.x - transform.width / 2, point.y - transform.height / 2, progress]
-    }
-    const previous = metricPoints[nextIndex - 1]!
-    const next = metricPoints[nextIndex]!
-    const span = Math.max(next.progress - previous.progress, Number.EPSILON)
-    const amount = (progress - previous.progress) / span
-    return [
-      previous.x + (next.x - previous.x) * amount - transform.width / 2,
-      previous.y + (next.y - previous.y) * amount - transform.height / 2,
-      progress,
-    ]
-  }
-
-  if (points.length <= MAX_GPU_SHAPE_PATH_VERTICES) {
-    return points.map((point) => [
-      point.x - transform.width / 2,
-      point.y - transform.height / 2,
-      point.progress,
-    ])
-  }
-  const sampleCount = MAX_GPU_SHAPE_PATH_VERTICES
-  return Array.from({ length: sampleCount }, (_, index) =>
-    sampleAtProgress(index / (closed ? sampleCount : sampleCount - 1)),
-  )
 }
 
 /**
