@@ -502,3 +502,87 @@ export function createMotionTimeViewportController(
 
   return { cancel, prepareNavigatorPreview, attach }
 }
+
+/**
+ * The frame a pointer position addresses on the axis.
+ *
+ * The playhead stays inside the comp, After Effects style — the axis may run
+ * past the comp end to show an overhanging layer, but there is no frame out
+ * there to sit on. `null` means the surface has no measurable width.
+ */
+export function resolveMotionFrameFromClientX(input: {
+  clientX: number
+  bounds: Pick<DOMRect, 'left' | 'width'>
+  viewport: MotionTimeViewport
+  /** Last frame the axis addresses, inclusive. */
+  maxFrame: number
+}): number | null {
+  const { clientX, bounds, viewport, maxFrame } = input
+  if (bounds.width <= 0) return null
+  const frameRange = Math.max(1, viewport.endFrame - viewport.startFrame)
+  return Math.max(
+    0,
+    Math.min(
+      maxFrame - 1,
+      Math.round(viewport.startFrame + ((clientX - bounds.left) / bounds.width) * frameRange),
+    ),
+  )
+}
+
+/** What releasing a playhead scrub commits. */
+export interface MotionScrubRelease {
+  /** Frame worth committing; `null` when the gesture produced none. */
+  frame: number | null
+  /** Viewport worth committing; `null` when the committed one already matches. */
+  viewport: MotionTimeViewport | null
+}
+
+/**
+ * Box of the scrub surface at release, when there is one to measure.
+ *
+ * A pointer that was cancelled mid-gesture carries no usable coordinate, and an
+ * unmounted surface has none to measure, so both leave the release without a
+ * box; the caller then falls back on the last frame the loop previewed.
+ */
+export function resolveMotionScrubReleaseBounds(input: {
+  cancelled: boolean
+  surface: HTMLElement | null
+}): Pick<DOMRect, 'left' | 'width'> | null {
+  if (input.cancelled || !input.surface) return null
+  return input.surface.getBoundingClientRect()
+}
+
+/**
+ * Decide what a scrub release commits.
+ *
+ * The axis is only committed once the scrub actually panned it; a release that
+ * kept the axis where the render already had it leaves it to the render.
+ */
+export function resolveMotionScrubRelease(input: {
+  clientX: number
+  /** Release-point box; `null` when there is nothing to measure. */
+  bounds: Pick<DOMRect, 'left' | 'width'> | null
+  viewport: MotionTimeViewport
+  /** Viewport the render has committed; the release only commits a change. */
+  committedViewport: MotionTimeViewport
+  compositionEndFrame: number | null
+  durationInFrames: number
+  latestFrame: number | null
+}): MotionScrubRelease {
+  const { clientX, bounds, viewport, committedViewport, latestFrame } = input
+  const pointerFrame = bounds
+    ? resolveMotionFrameFromClientX({
+        clientX,
+        bounds,
+        viewport,
+        maxFrame: input.compositionEndFrame ?? input.durationInFrames,
+      })
+    : null
+  const viewportChanged =
+    committedViewport.startFrame !== viewport.startFrame ||
+    committedViewport.endFrame !== viewport.endFrame
+  return {
+    frame: pointerFrame ?? latestFrame,
+    viewport: viewportChanged ? viewport : null,
+  }
+}

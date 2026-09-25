@@ -20,7 +20,7 @@ import type { TimelineItem, TimelineTrack } from '@/types/timeline'
 import { addItemOnNewTrack, addItemsOnNewTracks, captureSnapshot, CompactNavigator, createDefaultControllerItem, createDefaultGradientItem, createDefaultShapeItem, createDefaultSolidColorItem, createTextTemplateItem, PropertyLinkPickWhipOverlay, getAnimatablePropertiesForItem, KEYFRAME_EDGE_INSET, moveItems, openComposition, resolveDroppedMediaEntriesFromPayload, setPropertyExpression, removePropertyExpression, setTracks, updateItem, useCompositionNavigationStore, useCompositionsStore, useItemsStore, useKeyframesStore, useKeyframeSelectionStore, useTimelineCommandStore, useTimelineSettingsStore, usePropertyLinkPickWhip, wouldCreateCompositionCycle } from '@/features/editor/deps/timeline-motion'
 import { clearSpanDragVisuals, clearSpanTrimVisuals, createMotionSpanDragCommands, createMotionSpanTrimCommands, type SpanDragState, type SpanTrimState } from './motion-span-interactions'
 import { createMotionRowReorderCommands, type RowReorderDragState } from './motion-row-reorder'
-import { advanceMotionScrubPan, createMotionTimeViewportController, formatFrameTime, normalizeMotionTimeViewport, resolveMotionScrubFramePaint, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
+import { advanceMotionScrubPan, createMotionTimeViewportController, formatFrameTime, normalizeMotionTimeViewport, resolveMotionFrameFromClientX, resolveMotionScrubFramePaint, resolveMotionScrubRelease, resolveMotionScrubReleaseBounds, type MotionTimeViewport, type MotionTimeViewportController } from './motion-time-viewport-controller'
 import { collectMotionViewportPreviewElements, collectMotionViewportPreviewGrids, collectMotionViewportPreviewNavigator, collectMotionViewportPreviewPlayhead, collectMotionViewportPreviewRulerLabels, paintMotionViewportGrids, paintMotionViewportNavigator, paintMotionViewportPlayhead, paintMotionViewportRulerLabels, paintMotionViewportTargets } from './motion-time-viewport-preview'
 import { createMotionLayerClipboardCommands } from './motion-layer-clipboard'
 import { createMotionLayerSelectionCommands } from './motion-layer-selection'
@@ -1255,21 +1255,13 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
   }, [])
 
   const frameFromClientX = useCallback(
-    (clientX: number, surface: HTMLDivElement, viewport: MotionTimeViewport) => {
-      const rect = surface.getBoundingClientRect()
-      if (rect.width <= 0) return null
-      const frameRange = Math.max(1, viewport.endFrame - viewport.startFrame)
-      return Math.max(
-        0,
-        Math.min(
-          // The playhead stays inside the comp, After Effects style — the axis may
-          // run past the comp end to show an overhanging layer, but there is no
-          // frame out there to sit on.
-          (compositionEndFrame ?? durationInFrames) - 1,
-          Math.round(viewport.startFrame + ((clientX - rect.left) / rect.width) * frameRange),
-        ),
-      )
-    },
+    (clientX: number, surface: HTMLDivElement, viewport: MotionTimeViewport) =>
+      resolveMotionFrameFromClientX({
+        clientX,
+        bounds: surface.getBoundingClientRect(),
+        viewport,
+        maxFrame: compositionEndFrame ?? durationInFrames,
+      }),
     [compositionEndFrame, durationInFrames],
   )
 
@@ -1435,30 +1427,38 @@ const CompositingTimelineCore = memo(function CompositingTimelineCore({
         scrubAnimationFrameRef.current = null
       }
       const surface = playheadScrubSurfaceRef.current
-      const finalViewport = playheadScrubViewportRef.current ?? timeViewportRef.current
-      const pointerFrame =
-        surface && event.type !== 'pointercancel'
-          ? frameFromClientX(event.clientX, surface, finalViewport)
-          : null
-      const finalFrame = pointerFrame ?? latestScrubFrameRef.current
+      const committedViewport = timeViewportRef.current
+      const release = resolveMotionScrubRelease({
+        clientX: event.clientX,
+        bounds: resolveMotionScrubReleaseBounds({
+          cancelled: event.type === 'pointercancel',
+          surface,
+        }),
+        viewport: playheadScrubViewportRef.current ?? committedViewport,
+        committedViewport,
+        compositionEndFrame,
+        durationInFrames,
+        latestFrame: latestScrubFrameRef.current,
+      })
       latestScrubFrameRef.current = null
       scrubAnimationTimeRef.current = null
       playheadScrubClientXRef.current = null
       playheadScrubSurfaceRef.current = null
       playheadScrubViewportRef.current = null
-      if (finalFrame !== null) setScrubFrame(finalFrame)
+      if (release.frame !== null) setScrubFrame(release.frame)
       setPreviewFrame(null)
-      if (
-        finalViewport.startFrame !== timeViewportRef.current.startFrame ||
-        finalViewport.endFrame !== timeViewportRef.current.endFrame
-      ) {
-        commitMotionTimeViewport(finalViewport)
-      }
+      if (release.viewport) commitMotionTimeViewport(release.viewport)
       if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
         event.currentTarget.releasePointerCapture?.(event.pointerId)
       }
     },
-    [commitMotionTimeViewport, frameFromClientX, setPreviewFrame, setScrubFrame],
+    [
+      commitMotionTimeViewport,
+      compositionEndFrame,
+      durationInFrames,
+      setPreviewFrame,
+      setScrubFrame,
+    ],
   )
 
   useEffect(
