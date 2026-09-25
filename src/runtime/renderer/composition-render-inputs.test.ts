@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vite-plus/test'
-import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
+import type {
+  ImageItem,
+  LottieItem,
+  TimelineItem,
+  TimelineTrack,
+  VideoItem,
+} from '@/types/timeline'
 import {
   buildTransitionTrackOrderById,
+  collectTopLevelMediaItems,
+  collectTopLevelVideoItems,
   resolveCompositionRenderTracks,
 } from './composition-render-inputs'
 
@@ -38,6 +46,34 @@ function makeTextItem(): TimelineItem {
     label: 'Title',
     text: 'Hello',
   } as TimelineItem
+}
+
+function makeImageItem(overrides: Partial<ImageItem> = {}): ImageItem {
+  return {
+    id: 'image-1',
+    type: 'image',
+    trackId: 'video-track',
+    from: 0,
+    durationInFrames: 60,
+    label: 'still.png',
+    src: 'blob:still',
+    ...overrides,
+  }
+}
+
+function makeLottieItem(overrides: Partial<LottieItem> = {}): LottieItem {
+  return {
+    id: 'lottie-1',
+    type: 'lottie',
+    trackId: 'video-track',
+    from: 0,
+    durationInFrames: 60,
+    label: 'animation.json',
+    src: 'blob:animation',
+    frameRate: 30,
+    totalFrames: 60,
+    ...overrides,
+  }
 }
 
 function makeTrack(items: TimelineItem[], overrides: Partial<TimelineTrack> = {}): TimelineTrack {
@@ -139,6 +175,62 @@ describe('resolveCompositionRenderTracks', () => {
     const resolved = resolveTracks([makeTrack([item])])
 
     expect(onlyItem(onlyTrack(resolved))).toBe(item)
+  })
+})
+
+describe('collectTopLevelVideoItems', () => {
+  it('collects video items across tracks in track order and skips other kinds', () => {
+    const first = makeVideoItem({ id: 'video-a' })
+    const second = makeVideoItem({ id: 'video-b' })
+    const resolved = collectTopLevelVideoItems([
+      makeTrack([first, makeTextItem(), makeImageItem()]),
+      makeTrack([second], { id: 'other-track' }),
+    ])
+
+    expect(resolved.map((item) => item.id)).toEqual(['video-a', 'video-b'])
+  })
+})
+
+describe('collectTopLevelMediaItems', () => {
+  it('separates still images from the GIF and WebP frame caches', () => {
+    const media = collectTopLevelMediaItems([
+      makeTrack([
+        makeImageItem({ id: 'still' }),
+        makeImageItem({ id: 'gif', label: 'loop.gif' }),
+        makeImageItem({ id: 'webp', label: 'loop.webp' }),
+        makeLottieItem({ id: 'lottie' }),
+        makeTextItem(),
+      ]),
+    ])
+
+    expect(media.imageItems.map((item) => item.id)).toEqual(['still', 'gif', 'webp'])
+    expect(media.gifItems.map((item) => item.id)).toEqual(['gif'])
+    expect(media.webpItems.map((item) => item.id)).toEqual(['webp'])
+    expect(media.lottieItems.map((item) => item.id)).toEqual(['lottie'])
+  })
+
+  it('keeps a media-id-only item, which resolves its source while loading', () => {
+    const media = collectTopLevelMediaItems([
+      makeTrack([
+        makeImageItem({ id: 'by-media', src: '', mediaId: 'media-7' }),
+        makeLottieItem({ id: 'lottie-by-media', src: '', mediaId: 'media-8' }),
+      ]),
+    ])
+
+    expect(media.imageItems.map((item) => item.id)).toEqual(['by-media'])
+    expect(media.lottieItems.map((item) => item.id)).toEqual(['lottie-by-media'])
+  })
+
+  it('skips items with neither an inline source nor a media id', () => {
+    const media = collectTopLevelMediaItems([
+      makeTrack([
+        makeImageItem({ id: 'unsourced-image', src: '', mediaId: undefined }),
+        makeLottieItem({ id: 'unsourced-lottie', src: '', mediaId: undefined }),
+      ]),
+    ])
+
+    expect(media.imageItems).toEqual([])
+    expect(media.lottieItems).toEqual([])
   })
 })
 

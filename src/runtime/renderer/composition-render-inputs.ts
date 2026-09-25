@@ -10,8 +10,15 @@
  */
 
 import type { CompositionInputProps } from '@/types/export'
-import type { TimelineTrack } from '@/types/timeline'
+import type {
+  ImageItem,
+  LottieItem,
+  TimelineItem,
+  TimelineTrack,
+  VideoItem,
+} from '@/types/timeline'
 import { resolveReverseConformedVideoItem } from '@/shared/utils/reverse-conform-item'
+import { isAnimatedImage, isGifFormat } from './render-engine-predicates'
 
 type ItemRenderMode = 'export' | 'preview'
 
@@ -62,6 +69,59 @@ export function resolveCompositionRenderTracks({
       ),
     })) ?? []
   )
+}
+
+/** Video items on the top-level tracks, in track order. */
+export function collectTopLevelVideoItems(tracks: readonly TimelineTrack[]): VideoItem[] {
+  const videoItems: VideoItem[] = []
+  for (const track of tracks) {
+    for (const item of track.items ?? []) {
+      if (item.type === 'video') videoItems.push(item as VideoItem)
+    }
+  }
+  return videoItems
+}
+
+export interface TopLevelMediaItems {
+  lottieItems: LottieItem[]
+  imageItems: ImageItem[]
+  gifItems: ImageItem[]
+  webpItems: ImageItem[]
+}
+
+/** Renderable image and Lottie items on the top-level tracks, classified. */
+export function collectTopLevelMediaItems(tracks: readonly TimelineTrack[]): TopLevelMediaItems {
+  const mediaItems: TopLevelMediaItems = {
+    lottieItems: [],
+    imageItems: [],
+    gifItems: [],
+    webpItems: [],
+  }
+  for (const track of tracks) {
+    for (const item of track.items ?? []) {
+      collectTopLevelMediaItem(item, mediaItems)
+    }
+  }
+  return mediaItems
+}
+
+/**
+ * Classifies one track item. An item is at most one of these kinds, so the
+ * branches are exclusive; animated images split into the GIF and WebP frame
+ * caches their renderers read.
+ */
+function collectTopLevelMediaItem(item: TimelineItem, mediaItems: TopLevelMediaItems): void {
+  if (item.type === 'lottie') {
+    if (item.src || item.mediaId) mediaItems.lottieItems.push(item as LottieItem)
+    return
+  }
+  if (item.type !== 'image') return
+  if (!item.src && !item.mediaId) return
+  const imageItem = item as ImageItem
+  mediaItems.imageItems.push(imageItem)
+  if (!isAnimatedImage(imageItem)) return
+  if (isGifFormat(imageItem)) mediaItems.gifItems.push(imageItem)
+  else mediaItems.webpItems.push(imageItem)
 }
 
 interface TransitionWindowLike {
