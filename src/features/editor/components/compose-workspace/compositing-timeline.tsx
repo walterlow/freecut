@@ -47,6 +47,11 @@ import {
   MotionLayerTimingCell,
 } from './motion-layer-row-cells'
 import { MotionGroupLaneCell, MotionGroupNameCell } from './motion-group-row-cells'
+import {
+  isTranslateOnlyItemsSnapshotChange,
+  resolveTranslatePresentation,
+  type CompositingTimelineItemsSnapshot,
+} from './motion-timeline-items-snapshot'
 
 const TIMELINE_CONTENT_LEFT = LAYER_COLUMN_WIDTH + 1
 // Tick labels on top, the in/out render-range lane along the bottom.
@@ -339,66 +344,8 @@ interface CompositingTimelineProps {
   defaults?: { width: number; height: number; fps: number }
 }
 
-interface CompositingTimelineItemsSnapshot {
-  items: TimelineItem[]
-  tracks: TimelineTrack[]
-  itemById: Record<string, TimelineItem>
-}
-
 interface CompositingTimelineCoreProps extends CompositingTimelineProps {
   itemsSnapshot: CompositingTimelineItemsSnapshot
-}
-
-function isSameItemExceptPosition(previous: TimelineItem, next: TimelineItem): boolean {
-  if (previous === next) return true
-  if (previous.id !== next.id || previous.type !== next.type) return false
-
-  const previousRecord = previous as unknown as Record<string, unknown>
-  const nextRecord = next as unknown as Record<string, unknown>
-  const keys = new Set([...Object.keys(previousRecord), ...Object.keys(nextRecord)])
-  for (const key of keys) {
-    if (key === 'transform') continue
-    if (!Object.is(previousRecord[key], nextRecord[key])) return false
-  }
-
-  const previousTransform = previous.transform
-  const nextTransform = next.transform
-  if (previousTransform === nextTransform) return true
-  if (!previousTransform || !nextTransform) return false
-
-  const previousTransformRecord = previousTransform as unknown as Record<string, unknown>
-  const nextTransformRecord = nextTransform as unknown as Record<string, unknown>
-  const transformKeys = new Set([
-    ...Object.keys(previousTransformRecord),
-    ...Object.keys(nextTransformRecord),
-  ])
-  for (const key of transformKeys) {
-    if (key === 'x' || key === 'y') continue
-    if (!Object.is(previousTransformRecord[key], nextTransformRecord[key])) return false
-  }
-  return true
-}
-
-function isTranslateOnlyItemsSnapshotChange(
-  previous: CompositingTimelineItemsSnapshot,
-  next: CompositingTimelineItemsSnapshot,
-  itemId: string,
-): boolean {
-  if (previous === next) return false
-  if (previous.tracks !== next.tracks || previous.items.length !== next.items.length) return false
-
-  let changedItemFound = false
-  for (let index = 0; index < previous.items.length; index += 1) {
-    const previousItem = previous.items[index]
-    const nextItem = next.items[index]
-    if (!previousItem || !nextItem || previousItem.id !== nextItem.id) return false
-    if (previousItem === nextItem) continue
-    if (previousItem.id !== itemId || !isSameItemExceptPosition(previousItem, nextItem)) {
-      return false
-    }
-    changedItemFound = true
-  }
-  return changedItemFound
 }
 
 function createLayerTrack(params: {
@@ -2333,18 +2280,10 @@ const DeferredCompositingTimeline = memo(function DeferredCompositingTimeline({
   const deferredItemsSnapshot = useRafDeferredValue(itemsSnapshot)
   const pendingTranslateInteractionRef = useRef<number | null>(null)
   const gizmoState = useGizmoStore.getState()
-  const presentation =
-    gizmoState.activeGizmo?.mode === 'translate'
-      ? {
-          interactionId: gizmoState.activeGizmo.interactionId,
-          itemId: gizmoState.activeGizmo.itemId,
-        }
-      : gizmoState.presentationHandoff?.mode === 'translate'
-        ? {
-            interactionId: gizmoState.presentationHandoff.interactionId,
-            itemId: gizmoState.presentationHandoff.itemId,
-          }
-        : null
+  const presentation = resolveTranslatePresentation(
+    gizmoState.activeGizmo,
+    gizmoState.presentationHandoff,
+  )
   const isPendingTranslateCommit =
     deferredItemsSnapshot !== itemsSnapshot &&
     presentation !== null &&
