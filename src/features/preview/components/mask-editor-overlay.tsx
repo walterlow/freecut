@@ -70,6 +70,15 @@ import {
   type PenVertexMark,
 } from './mask-editor-pen-render-plan'
 import {
+  createPenHitInteraction,
+  dragVerticesByCanvasDelta,
+  resolvePenDragStart,
+  resolvePenHitHandle,
+  resolvePenPointerDownDragStart,
+  type PenDragStart,
+  type PenInteraction,
+} from './mask-editor-pointer-drag'
+import {
   convertVerticesAtIndices,
   removeVerticesAtIndices,
   resolveSelectedVertexTargets,
@@ -230,22 +239,6 @@ function applyDraggedHandle(
     vertex.tangentMode = 'smooth'
   }
 }
-type PenInteraction =
-  | {
-      type: 'create'
-      vertexIndex: number
-      startScreenPos: [number, number]
-    }
-  | {
-      type: 'close-or-drag' | 'vertex' | 'handle'
-      vertexIndex: number
-      handleType: 'in' | 'out' | null
-      startScreenPos: [number, number]
-      startCanvasPos: [number, number]
-      startVertices: MaskVertex[]
-      hasMoved: boolean
-    }
-
 type EditDragState =
   | {
       type: 'vertex' | 'handle'
@@ -775,34 +768,32 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const moveCanvas = screenToCanvas(clientX, clientY, getLiveCoordParams())
       const bounds = getItemScreenBounds()
       const scale = getEffectiveScale(coordParams)
-      const itemWidth = bounds.width / scale
-      const itemHeight = bounds.height / scale
-      const dx = moveCanvas.x - interaction.startCanvasPos[0]
-      const dy = moveCanvas.y - interaction.startCanvasPos[1]
-      const nextVertices = cloneVertices(interaction.startVertices)
-
-      if (interaction.handleType === null) {
-        const vertex = nextVertices[interaction.vertexIndex]!
-        const origin = interaction.startVertices[interaction.vertexIndex]!
-        vertex.position[0] = origin.position[0] + dx / itemWidth
-        vertex.position[1] = origin.position[1] + dy / itemHeight
-        return nextVertices
-      }
-
-      const vertex = nextVertices[interaction.vertexIndex]!
-      const origin = interaction.startVertices[interaction.vertexIndex]!
-      const originHandle = interaction.handleType === 'in' ? origin.inHandle : origin.outHandle
-      const nextHandle: [number, number] = [
-        originHandle[0] + dx / itemWidth,
-        originHandle[1] + dy / itemHeight,
-      ]
-
-      if (interaction.type === 'close-or-drag' && !altKey) vertex.tangentMode = 'smooth'
-      applyDraggedHandle(vertex, interaction.handleType, nextHandle, altKey)
-
-      return nextVertices
+      return dragVerticesByCanvasDelta({
+        startVertices: interaction.startVertices,
+        vertexIndex: interaction.vertexIndex,
+        handleType: interaction.handleType,
+        dx: moveCanvas.x - interaction.startCanvasPos[0],
+        dy: moveCanvas.y - interaction.startCanvasPos[1],
+        itemWidth: bounds.width / scale,
+        itemHeight: bounds.height / scale,
+        breakTangents: altKey,
+        smoothTangentOnDrag: interaction.type === 'close-or-drag',
+      })
     },
     [coordParams, getItemScreenBounds, getLiveCoordParams],
+  )
+
+  const startPenDrag = useCallback(
+    (dragStart: PenDragStart | null) => {
+      if (!dragStart) return
+
+      if (dragStart.kind === 'vertex') {
+        startVertexDrag(dragStart.index)
+      } else {
+        startHandleDrag(dragStart.index, dragStart.handleType)
+      }
+    },
+    [startHandleDrag, startVertexDrag],
   )
 
   const handlePenPointerDown = useCallback(
@@ -817,45 +808,15 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const canvasPos = screenToCanvas(e.clientX, e.clientY, getLiveCoordParams())
 
       if (hit) {
-        const handleType = hit.type === 'inHandle' ? 'in' : hit.type === 'outHandle' ? 'out' : null
-        const isClosingVertex = hit.type === 'vertex' && hit.index === 0 && penVertices.length >= 3
-        penInteractionRef.current = isClosingVertex
-          ? {
-              type: 'close-or-drag',
-              vertexIndex: hit.index,
-              // Match normal point placement: drag sets the anchor's outgoing direction.
-              handleType: 'out',
-              startScreenPos: [e.clientX, e.clientY],
-              startCanvasPos: [canvasPos.x, canvasPos.y],
-              startVertices: cloneVertices(penVertices),
-              hasMoved: false,
-            }
-          : hit.type === 'vertex'
-            ? {
-                type: 'vertex',
-                vertexIndex: hit.index,
-                handleType: null,
-                startScreenPos: [e.clientX, e.clientY],
-                startCanvasPos: [canvasPos.x, canvasPos.y],
-                startVertices: cloneVertices(penVertices),
-                hasMoved: false,
-              }
-            : {
-                type: 'handle',
-                vertexIndex: hit.index,
-                handleType,
-                startScreenPos: [e.clientX, e.clientY],
-                startCanvasPos: [canvasPos.x, canvasPos.y],
-                startVertices: cloneVertices(penVertices),
-                hasMoved: false,
-              }
+        penInteractionRef.current = createPenHitInteraction({
+          hit,
+          screenPos: [e.clientX, e.clientY],
+          canvasPos: [canvasPos.x, canvasPos.y],
+          vertices: penVertices,
+        })
         setPenDragging(true)
-        setHover(hit.index, handleType)
-        if (hit.type === 'vertex' && !isClosingVertex) {
-          startVertexDrag(hit.index)
-        } else if (handleType) {
-          startHandleDrag(hit.index, handleType)
-        }
+        setHover(hit.index, resolvePenHitHandle(hit))
+        startPenDrag(resolvePenPointerDownDragStart(hit, penVertices.length))
         canvasRef.current?.setPointerCapture(e.pointerId)
         return
       }
@@ -884,10 +845,53 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       getLiveCoordParams,
       setPenDragging,
       setHover,
-      startVertexDrag,
-      startHandleDrag,
+      startPenDrag,
       addPenVertex,
     ],
+  )
+
+  /** A pen point planted by the last click turns into a bezier once dragged far enough. */
+  const extendPenLastHandle = useCallback(
+    (norm: [number, number], vertexIndex: number) => {
+      const lastVerts = useMaskEditorStore.getState().penVertices
+      const last = lastVerts[lastVerts.length - 1]
+      if (!last) return
+
+      startHandleDrag(vertexIndex, 'out')
+      updatePenLastHandle([norm[0] - last.position[0], norm[1] - last.position[1]])
+    },
+    [startHandleDrag, updatePenLastHandle],
+  )
+
+  const updatePenDragInteraction = useCallback(
+    (interaction: PenInteraction, e: React.PointerEvent, norm: [number, number]) => {
+      const dist = Math.hypot(
+        e.clientX - interaction.startScreenPos[0],
+        e.clientY - interaction.startScreenPos[1],
+      )
+
+      if (interaction.type === 'create') {
+        if (dist >= PEN_BEZIER_DRAG_THRESHOLD) {
+          extendPenLastHandle(norm, interaction.vertexIndex)
+        }
+        return
+      }
+
+      const interactionDragThreshold =
+        interaction.type === 'close-or-drag' ? PEN_BEZIER_DRAG_THRESHOLD : DRAG_THRESHOLD
+
+      if (dist < interactionDragThreshold && !interaction.hasMoved) {
+        return
+      }
+
+      if (!interaction.hasMoved) {
+        interaction.hasMoved = true
+        startPenDrag(resolvePenDragStart(interaction))
+      }
+
+      setPenVertices(buildPenDragVertices(interaction, e.clientX, e.clientY, e.altKey))
+    },
+    [buildPenDragVertices, extendPenLastHandle, setPenVertices, startPenDrag],
   )
 
   const handlePenPointerMove = useCallback(
@@ -897,41 +901,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
       const interaction = penInteractionRef.current
       if (interaction) {
-        const dist = Math.hypot(
-          e.clientX - interaction.startScreenPos[0],
-          e.clientY - interaction.startScreenPos[1],
-        )
-
-        if (interaction.type === 'create') {
-          if (dist < PEN_BEZIER_DRAG_THRESHOLD) return
-          const lastVerts = useMaskEditorStore.getState().penVertices
-          const last = lastVerts[lastVerts.length - 1]
-          if (!last) return
-
-          startHandleDrag(interaction.vertexIndex, 'out')
-          updatePenLastHandle([norm[0] - last.position[0], norm[1] - last.position[1]])
-          return
-        }
-
-        const interactionDragThreshold =
-          interaction.type === 'close-or-drag' ? PEN_BEZIER_DRAG_THRESHOLD : DRAG_THRESHOLD
-
-        if (dist < interactionDragThreshold && !interaction.hasMoved) {
-          return
-        }
-
-        if (!interaction.hasMoved) {
-          interaction.hasMoved = true
-          if (interaction.type === 'vertex') {
-            startVertexDrag(interaction.vertexIndex)
-          } else if (interaction.type === 'close-or-drag') {
-            startHandleDrag(interaction.vertexIndex, interaction.handleType ?? 'in')
-          } else if (interaction.handleType) {
-            startHandleDrag(interaction.vertexIndex, interaction.handleType)
-          }
-        }
-
-        setPenVertices(buildPenDragVertices(interaction, e.clientX, e.clientY, e.altKey))
+        updatePenDragInteraction(interaction, e, norm)
         return
       }
 
@@ -944,17 +914,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         setHover(hit.index, hit.type === 'inHandle' ? 'in' : 'out')
       }
     },
-    [
-      screenToNorm,
-      setPenCursorPos,
-      startHandleDrag,
-      updatePenLastHandle,
-      startVertexDrag,
-      setPenVertices,
-      buildPenDragVertices,
-      hitTestPenEvent,
-      setHover,
-    ],
+    [screenToNorm, setPenCursorPos, updatePenDragInteraction, hitTestPenEvent, setHover],
   )
 
   const handlePenPointerUp = useCallback(
