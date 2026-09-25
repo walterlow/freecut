@@ -31,12 +31,7 @@ import {
   getEffectiveScale,
   transformToScreenBounds,
 } from '../utils/coordinate-transform'
-import {
-  convertVertexToBezier,
-  convertVertexToCorner,
-  insertVertexBetween,
-  removeVertex,
-} from '../utils/mask-path-utils'
+import { insertVertexBetween, removeVertex } from '../utils/mask-path-utils'
 import { getPathBounds, fitShapePathToBounds } from '../utils/path-fit'
 import { useSelectionStore } from '@/shared/state/selection'
 import { usePlaybackStore } from '@/shared/state/playback'
@@ -74,6 +69,13 @@ import {
   type PenSegmentGroup,
   type PenVertexMark,
 } from './mask-editor-pen-render-plan'
+import {
+  convertVerticesAtIndices,
+  removeVerticesAtIndices,
+  resolveSelectedVertexTargets,
+  resolveSelectionAfterVertexRemoval,
+  shouldHandleConvertVertexRequest,
+} from './mask-editor-vertex-selection'
 import {
   findBestCanvasDropPlacement,
   createClassicTrack,
@@ -1454,41 +1456,23 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     const vertices = getVertices()
     if (!vertices) return
 
-    const targetIndices =
-      selectedVertexIndices.length > 0
-        ? selectedVertexIndices.filter(
-            (index) => Number.isInteger(index) && index >= 0 && index < vertices.length,
-          )
-        : selectedVertexIndex !== null && vertices[selectedVertexIndex]
-          ? [selectedVertexIndex]
-          : []
-
+    const targetIndices = resolveSelectedVertexTargets({
+      selectedVertexIndices,
+      selectedVertexIndex,
+      vertexCount: vertices.length,
+    })
     if (targetIndices.length === 0) return
-    const minimumVertices = editingPathClosed ? 3 : 2
-    if (vertices.length - targetIndices.length < minimumVertices) return
 
-    const sortedIndices = [...targetIndices].sort((a, b) => b - a)
-    let nextVertices: MaskVertex[] | null = vertices
-    for (const index of sortedIndices) {
-      nextVertices = nextVertices ? removeVertex(nextVertices, index, minimumVertices) : null
-    }
+    const minimumVertices = editingPathClosed ? 3 : 2
+    const nextVertices = removeVerticesAtIndices(vertices, targetIndices, minimumVertices)
     if (!nextVertices) return
 
-    const removedSet = new Set(targetIndices)
-    const nextSelectedVertices = selectedVertexIndices
-      .filter((index) => !removedSet.has(index))
-      .map((index) => index - targetIndices.filter((removedIndex) => removedIndex < index).length)
-    const nextPrimaryCandidate =
-      selectedVertexIndex === null || removedSet.has(selectedVertexIndex)
-        ? null
-        : selectedVertexIndex -
-          targetIndices.filter((removedIndex) => removedIndex < selectedVertexIndex).length
-    const nextSelectedIndex =
-      nextPrimaryCandidate !== null && nextSelectedVertices.includes(nextPrimaryCandidate)
-        ? nextPrimaryCandidate
-        : (nextSelectedVertices[nextSelectedVertices.length - 1] ?? null)
-
-    selectVertices(nextSelectedVertices, nextSelectedIndex)
+    const nextSelection = resolveSelectionAfterVertexRemoval({
+      selectedVertexIndices,
+      selectedVertexIndex,
+      removedIndices: targetIndices,
+    })
+    selectVertices(nextSelection.indices, nextSelection.primaryIndex)
     commitVertices(nextVertices)
   }, [
     commitVertices,
@@ -1524,10 +1508,18 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   }, [isEditing, penMode, removeSelectedVertices])
 
   useEffect(() => {
-    if (!isEditing || penMode) return
-    if (convertSelectedVertexRequestVersion === 0) return
-    if (convertSelectedVertexRequestVersion === lastHandledConvertRequestRef.current) return
-    if (draggingVertexIndex !== null || draggingHandle !== null) return
+    if (
+      !shouldHandleConvertVertexRequest({
+        isEditing,
+        penMode,
+        requestVersion: convertSelectedVertexRequestVersion,
+        handledVersion: lastHandledConvertRequestRef.current,
+        draggingVertexIndex,
+        draggingHandle,
+      })
+    ) {
+      return
+    }
 
     lastHandledConvertRequestRef.current = convertSelectedVertexRequestVersion
 
@@ -1544,36 +1536,24 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       return
     }
 
-    const targetIndices =
-      selectedVertexIndices.length > 0
-        ? selectedVertexIndices.filter((index) => !!vertices[index])
-        : selectedVertexIndex !== null && vertices[selectedVertexIndex]
-          ? [selectedVertexIndex]
-          : []
-
+    const targetIndices = resolveSelectedVertexTargets({
+      selectedVertexIndices,
+      selectedVertexIndex,
+      vertexCount: vertices.length,
+    })
     if (targetIndices.length === 0) {
       selectVertex(null)
       return
     }
 
-    const convertedVertices = cloneVertices(vertices)
-    for (const index of targetIndices) {
-      const nextVertices =
-        convertSelectedVertexRequestMode === 'corner'
-          ? convertVertexToCorner(vertices, index)
-          : convertVertexToBezier(vertices, index, editingPathClosed)
-      const nextVertex = nextVertices[index]
-      if (nextVertex) {
-        convertedVertices[index] = {
-          ...nextVertex,
-          position: [...nextVertex.position] as [number, number],
-          inHandle: [...nextVertex.inHandle] as [number, number],
-          outHandle: [...nextVertex.outHandle] as [number, number],
-        }
-      }
-    }
-
-    commitVertices(convertedVertices)
+    commitVertices(
+      convertVerticesAtIndices({
+        vertices,
+        targetIndices,
+        mode: convertSelectedVertexRequestMode,
+        closed: editingPathClosed,
+      }),
+    )
   }, [
     isEditing,
     penMode,
@@ -1880,33 +1860,24 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   const handleEditContextMenu = useCallback(
     (e: React.MouseEvent) => {
       const hit = hitTestEditEvent(e)
+      if (hit?.type !== 'vertex') return
 
-      if (hit?.type === 'vertex') {
-        e.preventDefault()
-        e.stopPropagation()
-        const vertices = getVertices()
-        if (!vertices) return
-        const newVertices = removeVertex(vertices, hit.index, editingPathClosed ? 3 : 2)
-        if (newVertices) {
-          const nextSelectedVertices = selectedVertexIndices
-            .filter((index) => index !== hit.index)
-            .map((index) => (index > hit.index ? index - 1 : index))
-          const nextPrimaryCandidate =
-            selectedVertexIndex === null
-              ? null
-              : selectedVertexIndex === hit.index
-                ? null
-                : selectedVertexIndex > hit.index
-                  ? selectedVertexIndex - 1
-                  : selectedVertexIndex
-          const nextSelectedIndex =
-            nextPrimaryCandidate !== null && nextSelectedVertices.includes(nextPrimaryCandidate)
-              ? nextPrimaryCandidate
-              : (nextSelectedVertices[nextSelectedVertices.length - 1] ?? null)
-          selectVertices(nextSelectedVertices, nextSelectedIndex)
-          commitVertices(newVertices)
-        }
-      }
+      e.preventDefault()
+      e.stopPropagation()
+
+      const vertices = getVertices()
+      if (!vertices) return
+
+      const newVertices = removeVertex(vertices, hit.index, editingPathClosed ? 3 : 2)
+      if (!newVertices) return
+
+      const nextSelection = resolveSelectionAfterVertexRemoval({
+        selectedVertexIndices,
+        selectedVertexIndex,
+        removedIndices: [hit.index],
+      })
+      selectVertices(nextSelection.indices, nextSelection.primaryIndex)
+      commitVertices(newVertices)
     },
     [
       hitTestEditEvent,
