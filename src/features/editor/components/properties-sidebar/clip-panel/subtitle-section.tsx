@@ -1,13 +1,15 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Captions } from 'lucide-react'
+import { Captions, Trash2 } from 'lucide-react'
 import { i18n } from '@/i18n'
 
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { importMediaTranscriptionService } from '@/features/editor/deps/media-library-contract'
 import { usePlaybackStore } from '@/shared/state/playback'
 import {
   buildCueText,
@@ -232,6 +234,24 @@ const VirtualTranscriptSubtitleEditor = memo(function VirtualTranscriptSubtitleE
     [firstClip, fps, setCurrentFrame],
   )
 
+  const handleDeleteCaptions = useCallback(async () => {
+    for (const clip of clips) {
+      updateItem(clip.id, { transcriptCaptions: undefined } as Partial<TimelineItem>)
+    }
+
+    const mediaIds = [...new Set(clips.map((c) => c.mediaId).filter((id): id is string => !!id))]
+    if (mediaIds.length > 0) {
+      try {
+        const { mediaTranscriptionService } = await importMediaTranscriptionService()
+        for (const mediaId of mediaIds) {
+          await mediaTranscriptionService.deleteTranscript(mediaId)
+        }
+      } catch {
+        // Ignore deletion errors
+      }
+    }
+  }, [clips, updateItem])
+
   if (clips.length > 1) {
     return (
       <PropertySection
@@ -259,6 +279,16 @@ const VirtualTranscriptSubtitleEditor = memo(function VirtualTranscriptSubtitleE
             canvasHeight={canvasHeight}
             onApplyPatch={applyStylePatch}
           />
+
+          <Button
+            variant="destructive"
+            size="sm"
+            className="w-full text-xs h-7 gap-1.5"
+            onClick={handleDeleteCaptions}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {i18n.t('editor.subtitleSection.deleteSubtitles', { defaultValue: 'Eliminar subtítulos' })}
+          </Button>
 
           <p className="text-xs text-muted-foreground">
             {i18n.t('editor.subtitleSection.multiSelectHint', {
@@ -297,6 +327,16 @@ const VirtualTranscriptSubtitleEditor = memo(function VirtualTranscriptSubtitleE
             className="h-4 w-4 rounded border-border accent-primary"
           />
         </div>
+
+        <Button
+          variant="destructive"
+          size="sm"
+          className="w-full text-xs h-7 gap-1.5"
+          onClick={handleDeleteCaptions}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          {i18n.t('editor.subtitleSection.deleteSubtitles', { defaultValue: 'Eliminar subtítulos' })}
+        </Button>
 
         <CaptionStyleControls
           items={styleItems}

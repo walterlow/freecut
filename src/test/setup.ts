@@ -1,6 +1,10 @@
 import '@testing-library/jest-dom'
 import { afterEach } from 'vite-plus/test'
+import i18n from 'i18next'
 import '@/i18n'
+
+void i18n.changeLanguage('en')
+
 import { resetAutoKeyframeStore } from '@/features/keyframes/stores/auto-keyframe-store'
 
 // Mock ImageData for Canvas operations
@@ -42,6 +46,33 @@ if (typeof testGlobalRO.ResizeObserver === 'undefined') {
   }
 
   testGlobalRO.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
+}
+
+// Node 22+ / 26 defines an experimental localStorage getter on globalThis that returns undefined
+// if --localstorage-file is not provided, breaking zustand/persist and jsdom storage lookups.
+if (typeof globalThis.localStorage === 'undefined' || typeof globalThis.localStorage.setItem !== 'function') {
+  const memoryStore = new Map<string, string>()
+  const mockStorage = {
+    getItem: (key: string) => memoryStore.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      memoryStore.set(key, String(value))
+    },
+    removeItem: (key: string) => {
+      memoryStore.delete(key)
+    },
+    clear: () => {
+      memoryStore.clear()
+    },
+    key: (index: number) => Array.from(memoryStore.keys())[index] ?? null,
+    get length() {
+      return memoryStore.size
+    },
+  }
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: mockStorage,
+    configurable: true,
+    writable: true,
+  })
 }
 
 afterEach(() => {

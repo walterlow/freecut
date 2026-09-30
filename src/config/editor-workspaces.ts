@@ -11,6 +11,7 @@ export type EditorWorkspaceId = 'edit' | 'color' | 'motion'
 
 export type EditorSidebarTab =
   | 'media'
+  | 'audio'
   | 'text'
   | 'shapes'
   | 'effects'
@@ -76,6 +77,7 @@ export function normalizeEditorWorkspaceId(value: unknown): EditorWorkspaceId {
 
 const SIDEBAR_TABS: readonly EditorSidebarTab[] = [
   'media',
+  'audio',
   'text',
   'shapes',
   'effects',

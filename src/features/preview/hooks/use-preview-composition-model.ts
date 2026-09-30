@@ -131,15 +131,22 @@ export function mergeLiveItemPresentation(
 ): TimelineItem {
   if (!liveItem || liveItem.id !== item.id || liveItem.type !== item.type) return item
 
-  const itemWithLiveTransform =
+  let itemWithLiveUpdates =
     'transform' in liveItem && 'transform' in item && liveItem.transform !== item.transform
       ? ({ ...item, transform: liveItem.transform } as TimelineItem)
       : item
 
-  if (item.type !== 'text' || liveItem.type !== 'text') return itemWithLiveTransform
+  if (liveItem.projection360 !== item.projection360) {
+    itemWithLiveUpdates = { ...itemWithLiveUpdates, projection360: liveItem.projection360 } as TimelineItem
+  }
+  if (liveItem.effects !== item.effects) {
+    itemWithLiveUpdates = { ...itemWithLiveUpdates, effects: liveItem.effects } as TimelineItem
+  }
+
+  if (item.type !== 'text' || liveItem.type !== 'text') return itemWithLiveUpdates
 
   return {
-    ...itemWithLiveTransform,
+    ...itemWithLiveUpdates,
     text: liveItem.text,
     textSpans: liveItem.textSpans,
     spanLayout: liveItem.spanLayout,

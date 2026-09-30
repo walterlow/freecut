@@ -15,7 +15,11 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Edit3,
   Loader2,
+  Palette,
+  RefreshCw,
+  Replace,
   RotateCcw,
   Scissors,
   Search,
@@ -27,12 +31,23 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { CaptionStyleControls } from '@/features/editor/components/properties-sidebar/clip-panel/caption-style-controls'
+import { useProjectStore } from '@/features/media-library/deps/projects'
+import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
+import type { SubtitleSegmentItem, TextItem, TimelineItem } from '@/types/timeline'
+import {
   TranscribeDialog,
   type TranscribeDialogValues,
 } from '@/features/timeline/deps/transcribe-dialog'
 import { cn } from '@/shared/ui/cn'
 import { createLogger } from '@/shared/logging/logger'
-import { needsTranscriptWordSeparator } from '@/shared/utils/transcript-text'
+import { joinTranscriptWords, needsTranscriptWordSeparator } from '@/shared/utils/transcript-text'
 import {
   isTranscriptionOutOfMemoryError,
   TRANSCRIPTION_OOM_HINT,
@@ -159,6 +174,60 @@ function buildSegments(
   return segments
 }
 
+interface InlineWordEditorProps {
+  initialText: string
+  onSave: (text: string) => void
+  onCancel: () => void
+}
+
+const InlineWordEditor = memo(function InlineWordEditor({
+  initialText,
+  onSave,
+  onCancel,
+}: InlineWordEditorProps) {
+  const [value, setValue] = useState(initialText)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [])
+
+  const handleCommit = () => {
+    const trimmed = value.trim()
+    if (trimmed !== initialText) {
+      onSave(trimmed)
+    } else {
+      onCancel()
+    }
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          e.stopPropagation()
+          handleCommit()
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          e.stopPropagation()
+          onCancel()
+        }
+      }}
+      onBlur={handleCommit}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      className="inline-block h-6 min-w-[2.5rem] rounded border border-primary bg-background px-1 py-0 text-xs font-semibold text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
+      style={{ width: `${Math.max(4, value.length + 2)}ch` }}
+    />
+  )
+})
+
 interface TranscriptSegmentRowProps {
   segment: TranscriptSegment
   tokens: readonly TranscriptToken[]
@@ -170,6 +239,10 @@ interface TranscriptSegmentRowProps {
   matchesApproximate: boolean
   onSeek: (frame: number) => void
   onPointerDown: (index: number, event: ReactPointerEvent) => void
+  editingTokenKey?: string | null
+  onStartEdit?: (tokenKey: string) => void
+  onSaveEdit?: (token: TranscriptToken, newText: string) => void
+  onCancelEdit?: () => void
 }
 
 /**
@@ -188,6 +261,10 @@ const TranscriptSegmentRow = memo(function TranscriptSegmentRow({
   matchesApproximate,
   onSeek,
   onPointerDown,
+  editingTokenKey,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
 }: TranscriptSegmentRowProps) {
   const { t } = useTranslation()
   return (
@@ -223,14 +300,34 @@ const TranscriptSegmentRow = memo(function TranscriptSegmentRow({
             const isSelected = selectedKeys.has(token.key)
             const isMatch = matchKeys.has(token.key)
             const isIgnored = ignoredKeys.has(token.key)
+            const isEditing = editingTokenKey === token.key
+
+            if (isEditing) {
+              return (
+                <span key={token.key} className="inline-block mr-1">
+                  <InlineWordEditor
+                    initialText={token.text}
+                    onSave={(newText) => onSaveEdit?.(token, newText)}
+                    onCancel={() => onCancelEdit?.()}
+                  />
+                  {nextToken && needsTranscriptWordSeparator(token.text, nextToken.text) ? ' ' : ''}
+                </span>
+              )
+            }
+
             return (
               <span
                 key={token.key}
                 data-token-key={token.key}
                 data-token-index={index}
                 onPointerDown={(event) => onPointerDown(index, event)}
+                onDoubleClick={(event) => {
+                  event.stopPropagation()
+                  onStartEdit?.(token.key)
+                }}
+                title={t('transcript.doubleClickToEdit', { defaultValue: 'Doble clic para editar palabra' })}
                 className={cn(
-                  'cursor-text rounded px-0.5',
+                  'cursor-text rounded px-0.5 transition-colors',
                   isSelected
                     ? 'bg-primary text-primary-foreground'
                     : isActive
@@ -280,7 +377,15 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
   const [anchorIndex, setAnchorIndex] = useState(-1)
   const [focusIndex, setFocusIndex] = useState(-1)
   const [query, setQuery] = useState('')
+  const [editingTokenKey, setEditingTokenKey] = useState<string | null>(null)
+  const [isReplaceOpen, setIsReplaceOpen] = useState(false)
+  const [replaceValue, setReplaceValue] = useState('')
   const [transcribeDialogOpen, setTranscribeDialogOpen] = useState(false)
+  const [stylesDialogOpen, setStylesDialogOpen] = useState(false)
+  const updateItem = useTimelineStore((s) => s.updateItem)
+  const currentProject = useProjectStore((s) => s.currentProject)
+  const canvasWidth = currentProject?.metadata?.width ?? DEFAULT_PROJECT_WIDTH
+  const canvasHeight = currentProject?.metadata?.height ?? DEFAULT_PROJECT_HEIGHT
   // -1 means "no match shown yet", so the first Next/Enter lands on match 0.
   const [matchCursor, setMatchCursor] = useState(-1)
   // Bumped when a stored transcript changes externally (e.g. deleted from the media
@@ -321,6 +426,72 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
   const uniqueMediaIds = useMemo(
     () => Array.from(new Set(transcriptableItems.map((item) => item.mediaId))).sort(),
     [transcriptableItems],
+  )
+
+  const matchingSubtitleSegments = useMemo(() => {
+    return allItems.filter((item): item is SubtitleSegmentItem => {
+      if (item.type !== 'subtitle') return false
+      if (!item.source) return true
+      if (item.source.type === 'transcript') {
+        return uniqueMediaIds.length === 0 || uniqueMediaIds.includes(item.source.mediaId)
+      }
+      return true
+    })
+  }, [allItems, uniqueMediaIds])
+
+  const virtualTranscriptClips = useMemo(() => {
+    return transcriptableItems.filter(
+      (item) => item.transcriptCaptions?.type === 'transcript',
+    )
+  }, [transcriptableItems])
+
+  const syntheticItem = useMemo<SubtitleSegmentItem>(() => {
+    const firstClip = virtualTranscriptClips[0] ?? transcriptableItems[0]
+    const sampleStyle = firstClip?.transcriptCaptions?.style ?? {}
+    return {
+      id: firstClip?.id ?? 'preview-sample',
+      type: 'subtitle',
+      trackId: firstClip?.trackId ?? 'track-subs',
+      from: firstClip?.from ?? 0,
+      durationInFrames: firstClip?.durationInFrames ?? 150,
+      label: 'Transcript',
+      mediaId: firstClip?.mediaId ?? '',
+      source: {
+        type: 'transcript',
+        mediaId: firstClip?.mediaId ?? '',
+        clipId: firstClip?.id ?? '',
+      },
+      cues: [],
+      color: sampleStyle.color ?? '#ffffff',
+      ...sampleStyle,
+    }
+  }, [virtualTranscriptClips, transcriptableItems])
+
+  const handleApplyCaptionStyle = useCallback(
+    (patch: Partial<SubtitleSegmentItem | TextItem>) => {
+      for (const seg of matchingSubtitleSegments) {
+        updateItem(seg.id, patch)
+      }
+      for (const clip of transcriptableItems) {
+        const prevCaptions = clip.transcriptCaptions
+        updateItem(clip.id, {
+          transcriptCaptions: {
+            type: 'transcript',
+            mediaId: clip.mediaId,
+            enabled: prevCaptions?.enabled ?? true,
+            updatedAt: Date.now(),
+            sourceTranscriptUpdatedAt: prevCaptions?.sourceTranscriptUpdatedAt ?? Date.now(),
+            timingVersion: prevCaptions?.timingVersion ?? 4,
+            cues: prevCaptions?.cues ?? [],
+            style: {
+              ...(prevCaptions?.style ?? {}),
+              ...patch,
+            },
+          },
+        } as Partial<TimelineItem>)
+      }
+    },
+    [matchingSubtitleSegments, transcriptableItems, updateItem],
   )
 
   const transcriptsByMediaId = useMemo(() => {
@@ -677,6 +848,171 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
     [matchSpans, tokens, seekToToken],
   )
 
+  const handleSaveWord = useCallback(
+    async (token: TranscriptToken, newText: string) => {
+      setEditingTokenKey(null)
+      const trimmed = newText.trim()
+      if (trimmed === token.text) return
+
+      const transcript = mediaState[token.mediaId]?.transcript
+      if (!transcript) return
+
+      const isDelete = trimmed.length === 0
+
+      const nextSegments = transcript.segments
+        .map((seg, sIdx) => {
+          if (token.segmentIndex !== undefined) {
+            if (sIdx !== token.segmentIndex) return seg
+          } else {
+            if (token.sourceStart < seg.start - 0.05 || token.sourceEnd > seg.end + 0.05) return seg
+          }
+
+          if (isDelete) {
+            const nextWords = (seg.words ?? []).filter((w, wIdx) => {
+              return token.wordIndex !== undefined
+                ? wIdx !== token.wordIndex
+                : Math.abs(w.start - token.sourceStart) >= 0.05
+            })
+            const nextText = joinTranscriptWords(nextWords.map((w) => w.text))
+            return {
+              ...seg,
+              words: nextWords,
+              text: nextText,
+            }
+          }
+
+          let wordMatched = false
+          const nextWords = (seg.words ?? []).map((w, wIdx) => {
+            const matches =
+              token.wordIndex !== undefined
+                ? wIdx === token.wordIndex
+                : Math.abs(w.start - token.sourceStart) < 0.1
+            if (!matches) return w
+            wordMatched = true
+            return { ...w, text: trimmed }
+          })
+
+          const hasWords = nextWords.length > 0
+          return {
+            ...seg,
+            words: hasWords ? nextWords : seg.words,
+            text: hasWords && wordMatched
+              ? joinTranscriptWords(nextWords.map((w) => w.text))
+              : (!hasWords && (sIdx === token.segmentIndex || (token.sourceStart >= seg.start && token.sourceEnd <= seg.end)))
+                ? trimmed
+                : seg.text,
+          }
+        })
+        .filter((seg) => seg.text.trim().length > 0)
+
+      const updatedTranscript: MediaTranscript = {
+        ...transcript,
+        segments: nextSegments,
+        text: nextSegments.map((s) => s.text).join('\n'),
+        updatedAt: Date.now(),
+      }
+
+      setMediaState((prev) => ({
+        ...prev,
+        [token.mediaId]: {
+          status: 'ready',
+          transcript: updatedTranscript,
+        },
+      }))
+
+      try {
+        await mediaTranscriptionService.updateTranscript(updatedTranscript)
+        const currentProjectId = useProjectStore.getState().currentProject?.id
+        if (currentProjectId) {
+          void useTimelineStore.getState().saveTimeline?.(currentProjectId).catch(() => {})
+        }
+        toast.success(
+          isDelete
+            ? t('transcript.wordDeleted', { defaultValue: 'Palabra eliminada' })
+            : t('transcript.wordUpdated', { defaultValue: 'Palabra actualizada' }),
+        )
+      } catch (err) {
+        logger.warn('Failed to update transcript word', err)
+        toast.error(t('transcript.wordUpdateFailed', { defaultValue: 'Error al actualizar palabra' }))
+      }
+    },
+    [mediaState, t],
+  )
+
+  const handleReplaceOne = useCallback(async () => {
+    if (matchSpans.length === 0 || matchCursor < 0) return
+    const span = matchSpans[matchCursor]
+    if (!span) return
+    const token = tokens[span.start]
+    if (!token) return
+
+    await handleSaveWord(token, replaceValue)
+    goToMatch(matchCursor)
+  }, [matchSpans, matchCursor, tokens, handleSaveWord, replaceValue, goToMatch])
+
+  const handleReplaceAll = useCallback(async () => {
+    const findStr = query.trim()
+    const repStr = replaceValue.trim()
+    if (!findStr) return
+
+    const findLower = findStr.toLowerCase()
+    let totalReplaced = 0
+
+    for (const mediaId of uniqueMediaIds) {
+      const transcript = mediaState[mediaId]?.transcript
+      if (!transcript) continue
+
+      let modified = false
+      const nextSegments = transcript.segments.map((seg) => {
+        let segModified = false
+        const nextWords = (seg.words ?? []).map((w) => {
+          if (w.text.trim().toLowerCase() === findLower) {
+            segModified = true
+            totalReplaced += 1
+            return { ...w, text: repStr }
+          }
+          return w
+        })
+
+        if (!segModified) return seg
+        modified = true
+        return {
+          ...seg,
+          words: nextWords,
+          text: joinTranscriptWords(nextWords.map((w) => w.text)),
+        }
+      })
+
+      if (modified) {
+        const updatedTranscript: MediaTranscript = {
+          ...transcript,
+          segments: nextSegments,
+          text: nextSegments.map((s) => s.text).join('\n'),
+          updatedAt: Date.now(),
+        }
+        setMediaState((prev) => ({
+          ...prev,
+          [mediaId]: {
+            status: 'ready',
+            transcript: updatedTranscript,
+          },
+        }))
+        await mediaTranscriptionService.updateTranscript(updatedTranscript)
+      }
+    }
+
+    if (totalReplaced > 0) {
+      toast.success(
+        t('transcript.toastReplacedAll', {
+          defaultValue: 'Se reemplazaron {{count}} palabras',
+          count: totalReplaced,
+        }),
+      )
+    } else {
+      toast.info(t('transcript.toastNoMatches', { defaultValue: 'No se encontraron coincidencias' }))
+    }
+  }, [query, replaceValue, uniqueMediaIds, mediaState, t])
+
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       // Never hijack typing in the search box (or any input that bubbles here).
@@ -696,12 +1032,19 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
         event.preventDefault()
         event.stopPropagation()
         handleApply()
+      } else if (event.key === 'F2' || (event.key === 'e' && !event.ctrlKey && !event.metaKey)) {
+        if (selectedSlice.length === 1 && selectedSlice[0]) {
+          event.preventDefault()
+          event.stopPropagation()
+          setEditingTokenKey(selectedSlice[0].key)
+        }
       } else if (event.key === 'Escape') {
         setAnchorIndex(-1)
         setFocusIndex(-1)
+        setEditingTokenKey(null)
       }
     },
-    [selectedKeys.size, handleIgnoreToggle, ignoredSpanCount, handleApply],
+    [selectedKeys.size, handleIgnoreToggle, ignoredSpanCount, handleApply, selectedSlice],
   )
 
   const needsTranscription = uniqueMediaIds.filter(
@@ -713,10 +1056,11 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
   })
 
   const handleTranscribe = useCallback((values: TranscribeDialogValues) => {
-    const targets = uniqueMediaIds.filter((id) => {
+    const pendingTargets = uniqueMediaIds.filter((id) => {
       const status = mediaState[id]?.status
       return status === 'needs' || status === 'error'
     })
+    const targets = pendingTargets.length > 0 ? pendingTargets : uniqueMediaIds
     if (targets.length === 0) return
 
     setTranscribeDialogOpen(false)
@@ -790,6 +1134,47 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
     )
   }, [needsTranscription, transcriptableItems, t])
 
+  const handleClearTranscripts = useCallback(async () => {
+    const readyTargets = uniqueMediaIds.filter(
+      (id) =>
+        mediaState[id]?.status === 'ready' ||
+        Boolean(mediaState[id]?.transcript) ||
+        transcriptableItems.some(
+          (item) =>
+            item.mediaId === id &&
+            item.transcriptCaptions?.cues &&
+            item.transcriptCaptions.cues.length > 0,
+        ),
+    )
+    const targets = readyTargets.length > 0 ? readyTargets : uniqueMediaIds
+    if (targets.length === 0) return
+
+    let deletedCount = 0
+    for (const mediaId of targets) {
+      try {
+        await mediaTranscriptionService.deleteTranscript(mediaId)
+        requestedRef.current.delete(mediaId)
+        deletedCount += 1
+      } catch (err) {
+        logger.warn('Failed to delete transcript', { mediaId, err })
+      }
+    }
+    setAnchorIndex(-1)
+    setFocusIndex(-1)
+    setMediaState((prev) => {
+      const next = { ...prev }
+      for (const id of targets) {
+        next[id] = { status: 'needs' }
+      }
+      return next
+    })
+    toast.success(
+      deletedCount === 1
+        ? t('media.card.transcriptDeletedFor', { name: transcriptionFileName })
+        : t('media.card.transcriptsDeleted', { count: deletedCount }),
+    )
+  }, [uniqueMediaIds, mediaState, transcriptableItems, t, transcriptionFileName])
+
   const selectionCount = selectedKeys.size
 
   return (
@@ -809,9 +1194,63 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
       role="region"
       aria-label={t('transcript.title')}
     >
-      {/* Scope toggle */}
-      <div className="flex items-center gap-1 border-b border-border p-2">
+      {/* Scope toggle & actions */}
+      <div className="flex items-center justify-between gap-2 border-b border-border p-2">
         <ScopeToggle scope={scope} onChange={setScope} t={t} />
+        {tokens.length > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            {selectedSlice.length === 1 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1.5 px-2 text-primary"
+                onClick={() => setEditingTokenKey(selectedSlice[0]!.key)}
+                title="Editar palabra seleccionada (o doble clic)"
+              >
+                <Edit3 className="h-3 w-3" />
+                <span className="hidden sm:inline">Editar</span>
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2 text-primary hover:text-primary"
+              onClick={() => setStylesDialogOpen(true)}
+              title={t('transcript.styleButtonTooltip', {
+                defaultValue: 'Personalizar tipografía, sombra, contorno, fondo y animaciones',
+              })}
+            >
+              <Palette className="h-3 w-3" />
+              <span className="hidden sm:inline">
+                {t('transcript.styleButton', { defaultValue: 'Estilos' })}
+              </span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2"
+              onClick={() => setTranscribeDialogOpen(true)}
+              title="Volver a transcribir o cambiar configuración"
+            >
+              <RefreshCw className="h-3 w-3" />
+              <span className="hidden sm:inline">Regenerar</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={handleClearTranscripts}
+              title="Eliminar transcripción y limpiar panel"
+            >
+              <Trash2 className="h-3 w-3" />
+              <span className="hidden sm:inline">Limpiar</span>
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Search */}
@@ -884,7 +1323,68 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
             </Button>
           </div>
         )}
+        <Button
+          type="button"
+          variant={isReplaceOpen ? 'secondary' : 'ghost'}
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={() => setIsReplaceOpen((prev) => !prev)}
+          title={isReplaceOpen ? 'Ocultar reemplazar' : 'Buscar y reemplazar'}
+          aria-label="Buscar y reemplazar"
+        >
+          <Replace className="h-3.5 w-3.5" />
+        </Button>
       </div>
+
+      {isReplaceOpen && (
+        <div className="flex items-center gap-1.5 border-b border-border bg-muted/20 px-2 py-1.5">
+          <div className="relative flex-1">
+            <Input
+              value={replaceValue}
+              onChange={(event) => setReplaceValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void handleReplaceAll()
+                }
+              }}
+              placeholder={t('transcript.replacePlaceholder', { defaultValue: 'Reemplazar por...' })}
+              className="h-7 text-xs"
+            />
+            {replaceValue.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setReplaceValue('')}
+                className="absolute right-1.5 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs px-2"
+            onClick={() => void handleReplaceOne()}
+            disabled={matchSpans.length === 0}
+            title="Reemplazar coincidencia actual"
+          >
+            {t('transcript.replace', { defaultValue: 'Reemplazar' })}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-7 text-xs px-2"
+            onClick={() => void handleReplaceAll()}
+            disabled={!query.trim()}
+            title="Reemplazar todas las coincidencias"
+          >
+            {t('transcript.replaceAll', { defaultValue: 'Reemplazar todo' })}
+          </Button>
+        </div>
+      )}
 
       {/* Transcript body */}
       <div
@@ -970,6 +1470,10 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
                 matchesApproximate={matchesApproximate}
                 onSeek={seekToToken}
                 onPointerDown={handlePointerDown}
+                editingTokenKey={editingTokenKey}
+                onStartEdit={setEditingTokenKey}
+                onSaveEdit={handleSaveWord}
+                onCancelEdit={() => setEditingTokenKey(null)}
               />
             ))}
           </div>
@@ -1091,7 +1595,7 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
         open={transcribeDialogOpen}
         onOpenChange={setTranscribeDialogOpen}
         fileName={transcriptionFileName}
-        hasTranscript={false}
+        hasTranscript={tokens.length > 0 || uniqueMediaIds.some((id) => mediaState[id]?.status === 'ready')}
         isRunning={isBusy}
         progressPercent={null}
         progressLabel={t('transcript.transcribing')}
@@ -1099,7 +1603,33 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
         onCancel={() => {
           for (const mediaId of uniqueMediaIds) cancelMediaTranscriptionJob(mediaId)
         }}
+        onDelete={handleClearTranscripts}
       />
+
+      <Dialog open={stylesDialogOpen} onOpenChange={setStylesDialogOpen}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader className="pb-2 border-b border-border">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Palette className="h-4 w-4 text-primary" />
+              {t('transcript.styleDialogTitle', { defaultValue: 'Estilo de Subtítulos' })}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {t('transcript.styleDialogDesc', {
+                defaultValue:
+                  'Personaliza la tipografía, grosor, color, borde, sombra, recuadro de fondo y animaciones de los subtítulos.',
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-2">
+            <CaptionStyleControls
+              items={matchingSubtitleSegments.length > 0 ? matchingSubtitleSegments : [syntheticItem]}
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+              onApplyPatch={handleApplyCaptionStyle}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

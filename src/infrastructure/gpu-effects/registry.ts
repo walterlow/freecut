@@ -6,6 +6,7 @@ import * as blurEffects from './effects/blur'
 import * as distortEffects from './effects/distort'
 import * as stylizeEffects from './effects/stylize'
 import * as keyingEffects from './effects/keying'
+import * as projection360Effect from './effects/projection-360'
 
 export const GPU_EFFECT_REGISTRY = new Map<string, GpuEffectDefinition>()
 
@@ -45,6 +46,7 @@ registerEffects(blurEffects)
 registerEffects(distortEffects)
 registerEffects(stylizeEffects)
 registerEffects(keyingEffects)
+registerEffects(projection360Effect)
 
 export function getGpuEffect(id: string): GpuEffectDefinition | undefined {
   return GPU_EFFECT_REGISTRY.get(id)

@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
+import { usePrefersReducedMotion } from '@/shared/hooks/use-prefers-reduced-motion'
 import type { TFunction } from 'i18next'
 import type { MediaMetadata } from '@/types/storage'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +21,6 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import {
   RotateCcw,
@@ -35,10 +35,13 @@ import {
   HardDrive,
   Sparkles,
   Play,
+  ArrowLeft,
+  X,
 } from 'lucide-react'
 import {
   LocalInferenceUnloadControl,
   LocalModelCacheControl,
+  AiProviderSettings,
   useSettingsStore,
   CAPTIONING_INTERVAL_BOUNDS,
   DEFAULT_CAPTIONING_INTERVAL_SECONDS,
@@ -66,20 +69,14 @@ import { VOICE_OPTIONS, type VoiceName } from '@/infrastructure/audio/ui-sound'
 import { Select, SelectContent, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createLogger } from '@/shared/logging/logger'
 import { cn } from '@/shared/ui/cn'
-import { useNaturalHeight } from '@/shared/ui/use-natural-height'
 
 const log = createLogger('SettingsDialog')
 
-/** Minimum content height so short sections don't collapse the dialog. */
-const MIN_SECTION_HEIGHT = 360
-/** Fraction of the viewport a section may occupy before it scrolls instead. */
-const MAX_SECTION_HEIGHT_VH = 0.7
-
 const SETTINGS_SECTIONS = [
-  { id: 'general', labelKey: 'settings.sections.general', icon: Settings2 },
-  { id: 'timeline', labelKey: 'settings.sections.timeline', icon: Rows3 },
-  { id: 'ai', labelKey: 'settings.sections.ai', icon: Sparkles },
-  { id: 'storage', labelKey: 'settings.sections.storage', icon: HardDrive },
+  { id: 'general', labelKey: 'settings.sections.general', defaultLabel: 'General', icon: Settings2 },
+  { id: 'timeline', labelKey: 'settings.sections.timeline', defaultLabel: 'Línea de tiempo', icon: Rows3 },
+  { id: 'ai', labelKey: 'settings.sections.ai', defaultLabel: 'IA (Ollama, ComfyUI, Modelos)', icon: Sparkles },
+  { id: 'storage', labelKey: 'settings.sections.storage', defaultLabel: 'Almacenamiento y Caché', icon: HardDrive },
 ] as const
 
 const ESTIMATE_REFERENCE_DURATION_SEC = 60
@@ -395,29 +392,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('general')
 
-  // Animate the content area's height as sections change (width is fixed, so a
-  // pure vertical morph). Measure the active section's natural height and spring
-  // the wrapper to it, clamped to [min, 70vh]; taller sections cap and scroll.
-  const reduceMotion = useReducedMotion()
-  const contentRef = useRef<HTMLDivElement>(null)
-  const naturalHeight = useNaturalHeight(contentRef, open)
-  const [heightReady, setHeightReady] = useState(false)
-  // First measured height applies instantly; later section switches animate.
-  useEffect(() => {
-    if (naturalHeight > 0 && !heightReady) setHeightReady(true)
-  }, [naturalHeight, heightReady])
-  // Reset the instant-apply gate on close so reopening doesn't animate from a
-  // stale height.
-  useEffect(() => {
-    if (!open) setHeightReady(false)
-  }, [open])
-  const maxSectionHeight = Math.round(
-    (typeof window === 'undefined' ? 900 : window.innerHeight) * MAX_SECTION_HEIGHT_VH,
-  )
-  const targetSectionHeight =
-    naturalHeight > 0
-      ? Math.min(Math.max(naturalHeight, MIN_SECTION_HEIGHT), maxSectionHeight)
-      : undefined
+  const reduceMotion = usePrefersReducedMotion()
 
   const [clearState, setClearState] = useState<'idle' | 'clearing' | 'done' | 'partial'>('idle')
   const [showClearConfirm, setShowClearConfirm] = useState(false)
@@ -574,65 +549,112 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   ).length
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0 sm:top-16 sm:max-h-[calc(100vh-4rem)] sm:translate-y-0 sm:origin-top">
-        <DialogHeader className="flex flex-row items-center justify-between border-b px-6 py-4 pr-14">
-          <DialogTitle>{t('settings.title')}</DialogTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={resetToDefaults}
-            className="h-8 shrink-0 gap-1.5"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            {t('common.reset')}
-          </Button>
+      <DialogContent
+        hideCloseButton
+        className="!fixed !inset-0 !left-0 !top-0 !translate-x-0 !translate-y-0 !w-screen !h-screen !max-w-none !max-h-none !rounded-none sm:!rounded-none !border-none !p-0 !flex !flex-col !gap-0 bg-background z-50 overflow-hidden shadow-none"
+      >
+        <DialogHeader className="flex flex-row items-center justify-between border-b border-border/80 px-6 py-3 shrink-0 bg-background/95 backdrop-blur z-10">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              className="h-8 gap-1.5 px-3 text-xs font-semibold hover:bg-primary/10 hover:text-primary border-primary/30"
+              title="Volver al Editor principal"
+            >
+              <ArrowLeft className="w-4 h-4 text-primary" />
+              <span>Volver al Editor</span>
+            </Button>
+            <Separator orientation="vertical" className="h-5 bg-border/80 mx-1" />
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary">
+              <Settings2 className="w-4 h-4" />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-semibold leading-tight">{t('settings.title')}</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">Configuración global, modelos de IA, workflows de ComfyUI y almacenamiento</DialogDescription>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetToDefaults}
+              className="h-8 shrink-0 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              {t('common.reset')}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              className="h-8 gap-1.5 px-3.5 text-xs font-semibold shadow-xs"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Cerrar</span>
+            </Button>
+          </div>
         </DialogHeader>
-        <div className="flex min-h-0">
-          {/* Sidebar */}
-          <nav className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-white/6 p-2">
+
+        <div className="flex flex-1 min-h-0 w-full overflow-hidden">
+          {/* Sidebar (Menu lateral por pestañas) */}
+          <nav className="flex w-64 sm:w-72 shrink-0 flex-col gap-1 border-r border-border/60 bg-muted/15 p-4 overflow-y-auto">
+            <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              Categorías
+            </div>
             {SETTINGS_SECTIONS.map((section) => {
               const Icon = section.icon
+              const isActive = activeSection === section.id
               return (
                 <button
                   key={section.id}
                   type="button"
                   onClick={() => setActiveSection(section.id)}
                   className={cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] transition-colors duration-150 ease-out motion-reduce:transition-none',
-                    activeSection === section.id
-                      ? 'bg-primary/15 text-primary'
-                      : 'text-muted-foreground hover:bg-white/5 hover:text-foreground/80',
+                    'group flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-left text-sm font-medium transition-all duration-150',
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-muted/80 hover:text-foreground',
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  {t(section.labelKey)}
+                  <Icon
+                    className={cn(
+                      'h-4 w-4 shrink-0 transition-colors',
+                      isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-foreground',
+                    )}
+                  />
+                  <span className="flex-1 truncate">{t(section.labelKey, section.defaultLabel)}</span>
                 </button>
               )
             })}
+
+            {/* Botón Volver al Editor en el menú lateral */}
+            <div className="mt-auto pt-4 border-t border-border/60 flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-left text-sm font-semibold bg-muted/60 hover:bg-primary hover:text-primary-foreground text-foreground transition-all duration-150 shadow-xs cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4 shrink-0" />
+                <span className="flex-1">Volver al Editor</span>
+              </button>
+              <span className="px-3 text-[11px] text-muted-foreground/70">
+                O presiona la tecla ESC
+              </span>
+            </div>
           </nav>
 
-          {/* Content — height animates between sections (fixed width, so a clean
-              vertical morph); tall sections cap at 70vh and scroll. */}
-          <motion.div
-            className="min-h-0 flex-1 overflow-hidden"
-            initial={false}
-            animate={{ height: targetSectionHeight ?? 'auto' }}
-            transition={
-              reduceMotion || !heightReady
-                ? { duration: 0 }
-                : { type: 'spring', stiffness: 460, damping: 40, mass: 0.9 }
-            }
-          >
-            <ScrollArea className="h-full">
-              <div ref={contentRef} className="relative space-y-3 px-6 py-5 pr-7">
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.div
-                    key={activeSection}
-                    initial={reduceMotion ? false : { opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: reduceMotion ? 0 : 0.12 }}
-                  >
+          {/* Contenedor principal con scroll vertical suave para el mouse y sin cortes */}
+          <div className="flex-1 min-h-0 overflow-y-auto bg-background/50">
+            <div className="max-w-4xl mx-auto px-8 py-8 pb-32">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.div
+                  key={activeSection}
+                  initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: reduceMotion ? 0 : 0.12 }}
+                >
                     {activeSection === 'general' && (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -769,112 +791,129 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     )}
 
                     {activeSection === 'ai' && (
-                      <div className="space-y-3">
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label className="text-sm">
-                                {t('settings.ai.captionSampleInterval')}
-                              </Label>
-                              <p className="text-xs text-muted-foreground">
-                                {t('settings.ai.captionSampleIntervalDescription')}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center rounded-md border border-border bg-secondary p-0.5">
-                              {(['seconds', 'frames'] as const).map((unit) => (
-                                <button
-                                  key={unit}
-                                  type="button"
-                                  onClick={() => setSetting('captioningIntervalUnit', unit)}
-                                  className={cn(
-                                    'rounded px-2.5 py-1 text-xs transition-colors',
-                                    captioningIntervalUnit === unit
-                                      ? 'bg-primary/15 text-primary'
-                                      : 'text-muted-foreground hover:text-foreground',
-                                  )}
-                                >
-                                  {unit === 'seconds'
-                                    ? t('settings.ai.seconds')
-                                    : t('settings.ai.frames')}
-                                </button>
-                              ))}
-                            </div>
-                            <Input
-                              type="number"
-                              inputMode="decimal"
-                              className="h-8 w-24"
-                              min={intervalBounds.min}
-                              max={intervalBounds.max}
-                              step={intervalInputStep}
-                              value={captioningIntervalValue}
-                              onChange={(event) => {
-                                const parsed = Number(event.target.value)
-                                if (Number.isFinite(parsed)) {
-                                  setSetting('captioningIntervalValue', parsed)
-                                }
-                              }}
-                            />
-                            <span className="text-xs text-muted-foreground">
-                              {intervalUnitLabel}
-                            </span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-muted-foreground"
-                              onClick={() => {
-                                setSetting('captioningIntervalUnit', 'seconds')
-                                setSetting(
-                                  'captioningIntervalValue',
-                                  DEFAULT_CAPTIONING_INTERVAL_SECONDS,
-                                )
-                              }}
-                              disabled={
-                                captioningIntervalUnit === 'seconds' &&
-                                captioningIntervalValue === DEFAULT_CAPTIONING_INTERVAL_SECONDS
-                              }
-                            >
-                              {t('common.reset')}
-                            </Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {t('settings.ai.captionIntervalHint', {
-                              estimate: formatCaptionEstimate(
-                                t,
-                                captioningIntervalUnit,
-                                captioningIntervalValue,
-                              ),
-                            })}
-                          </p>
-                        </div>
+                      <div className="space-y-6">
+                        <AiProviderSettings />
 
-                        <div className="space-y-2">
-                          <div className="space-y-0.5">
-                            <Label className="text-sm">
-                              {t('settings.ai.defaultCaptionStyle')}
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                              {t('settings.ai.defaultCaptionStyleDescription')}
+                        <div className="space-y-4 pt-4 border-t border-border/40">
+                          <div>
+                            <h3 className="text-sm font-semibold text-foreground">
+                              Subtitulado y Transcripción Automática con IA
+                            </h3>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Configura la densidad de fotogramas analizados y el estilo visual predeterminado para los subtítulos.
                             </p>
                           </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {CAPTION_STYLE_PRESETS.map((preset) => (
-                              <button
-                                key={preset.id}
-                                type="button"
-                                title={t(preset.hintKey)}
-                                onClick={() => setSetting('defaultCaptionStylePresetId', preset.id)}
-                                className={cn(
-                                  'rounded-md border px-2.5 py-1 text-xs transition-colors',
-                                  defaultCaptionStylePresetId === preset.id
-                                    ? 'border-primary bg-primary/15 text-primary'
-                                    : 'border-border text-muted-foreground hover:text-foreground',
-                                )}
-                              >
-                                {preset.label}
-                              </button>
-                            ))}
+
+                          <div className="space-y-4 rounded-lg border border-border/60 bg-muted/20 p-4">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                  <Label className="text-sm">
+                                    {t('settings.ai.captionSampleInterval')}
+                                  </Label>
+                                  <p className="text-xs text-muted-foreground">
+                                    {t('settings.ai.captionSampleIntervalDescription')}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center rounded-md border border-border bg-secondary p-0.5">
+                                  {(['seconds', 'frames'] as const).map((unit) => (
+                                    <button
+                                      key={unit}
+                                      type="button"
+                                      onClick={() => setSetting('captioningIntervalUnit', unit)}
+                                      className={cn(
+                                        'rounded px-2.5 py-1 text-xs transition-colors',
+                                        captioningIntervalUnit === unit
+                                          ? 'bg-primary/15 text-primary'
+                                          : 'text-muted-foreground hover:text-foreground',
+                                      )}
+                                    >
+                                      {unit === 'seconds'
+                                        ? t('settings.ai.seconds')
+                                        : t('settings.ai.frames')}
+                                    </button>
+                                  ))}
+                                </div>
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  className="h-8 w-24 font-mono text-xs"
+                                  min={intervalBounds.min}
+                                  max={intervalBounds.max}
+                                  step={intervalInputStep}
+                                  value={captioningIntervalValue}
+                                  onChange={(event) => {
+                                    const parsed = Number(event.target.value)
+                                    if (Number.isFinite(parsed)) {
+                                      setSetting('captioningIntervalValue', parsed)
+                                    }
+                                  }}
+                                />
+                                <span className="text-xs text-muted-foreground">
+                                  {intervalUnitLabel}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-muted-foreground"
+                                  onClick={() => {
+                                    setSetting('captioningIntervalUnit', 'seconds')
+                                    setSetting(
+                                      'captioningIntervalValue',
+                                      DEFAULT_CAPTIONING_INTERVAL_SECONDS,
+                                    )
+                                  }}
+                                  disabled={
+                                    captioningIntervalUnit === 'seconds' &&
+                                    captioningIntervalValue === DEFAULT_CAPTIONING_INTERVAL_SECONDS
+                                  }
+                                >
+                                  {t('common.reset')}
+                                </Button>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {t('settings.ai.captionIntervalHint', {
+                                  estimate: formatCaptionEstimate(
+                                    t,
+                                    captioningIntervalUnit,
+                                    captioningIntervalValue,
+                                  ),
+                                })}
+                              </p>
+                            </div>
+
+                            <Separator />
+
+                            <div className="space-y-3">
+                              <div className="space-y-0.5">
+                                <Label className="text-sm">
+                                  {t('settings.ai.defaultCaptionStyle')}
+                                </Label>
+                                <p className="text-xs text-muted-foreground">
+                                  {t('settings.ai.defaultCaptionStyleDescription')}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {CAPTION_STYLE_PRESETS.map((preset) => (
+                                  <button
+                                    key={preset.id}
+                                    type="button"
+                                    title={t(preset.hintKey)}
+                                    onClick={() => setSetting('defaultCaptionStylePresetId', preset.id)}
+                                    className={cn(
+                                      'rounded-md border px-3 py-1.5 text-xs font-medium transition-colors',
+                                      defaultCaptionStylePresetId === preset.id
+                                        ? 'border-primary bg-primary/15 text-primary shadow-sm'
+                                        : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                                    )}
+                                  >
+                                    {preset.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1107,10 +1146,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   </motion.div>
                 </AnimatePresence>
               </div>
-            </ScrollArea>
-          </motion.div>
-        </div>
-      </DialogContent>
+            </div>
+          </div>
+        </DialogContent>
 
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
         <AlertDialogContent>

@@ -1,5 +1,8 @@
 import { memo } from 'react'
-import { cancelMediaTranscriptionJob } from '@/features/timeline/deps/media-transcription-service'
+import {
+  cancelMediaTranscriptionJob,
+  mediaTranscriptionService,
+} from '@/features/timeline/deps/media-transcription-service'
 import {
   TranscribeDialog,
   type TranscribeDialogValues,
@@ -94,6 +97,14 @@ export const TranscribeDialogController = memo(function TranscribeDialogControll
       onCancel={() => {
         markCaptionStopRequested()
         cancelMediaTranscriptionJob(itemMediaId)
+      }}
+      onDelete={async () => {
+        if (!itemMediaId) return
+        try {
+          await mediaTranscriptionService.deleteTranscript(itemMediaId)
+        } catch {
+          // ignore
+        }
       }}
     />
   )

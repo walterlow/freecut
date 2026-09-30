@@ -1024,13 +1024,15 @@ const MediaCardInternal = memo(function MediaCardInternal({
     }
   }
 
-  const handleDeleteTranscript = async (e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleDeleteTranscript = async (e?: React.MouseEvent) => {
+    e?.stopPropagation()
 
     const store = useMediaLibraryStore.getState()
-    const targets = getTargetMediaItems().filter(
+    const rawTargets = getTargetMediaItems()
+    const readyTargets = rawTargets.filter(
       (m) => store.transcriptStatus.get(m.id) === 'ready',
     )
+    const targets = readyTargets.length > 0 ? readyTargets : [media]
 
     let failures = 0
     for (const item of targets) {
@@ -1533,6 +1535,7 @@ const MediaCardInternal = memo(function MediaCardInternal({
       errorMessage={transcribeErrorMessage}
       onStart={handleStartTranscription}
       onCancel={handleCancelTranscript}
+      onDelete={handleDeleteTranscript}
     />
   )
 
@@ -1714,11 +1717,27 @@ const MediaCardInternal = memo(function MediaCardInternal({
 
               {/* Actions - hidden during upload */}
               {!isPreparingMedia && (
-                <div className="flex items-center gap-0.5 flex-shrink-0">
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {hasTranscript && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleOpenTranscribeDialog(e)
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-blue-500/15 hover:bg-blue-500/25 text-blue-600 dark:text-blue-400 text-[10px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Tiene transcripción. Clic para regenerar o limpiar"
+                    >
+                      <FileText className="w-3 h-3" />
+                      <span>Transcrito</span>
+                    </button>
+                  )}
                   <MediaInfoPopover
                     media={media}
                     triggerClassName="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors"
                     onSeekToCaption={handleSeekToCaption}
+                    onTranscribe={() => setTranscribeDialogOpen(true)}
+                    onDeleteTranscript={handleDeleteTranscript}
                   />
                 </div>
               )}
@@ -1836,8 +1855,27 @@ const MediaCardInternal = memo(function MediaCardInternal({
                       <Sparkles className="w-2.5 h-2.5" />
                     </div>
                   )}
+                  {!isBroken && hasTranscript && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleOpenTranscribeDialog(e)
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-blue-600/90 hover:bg-blue-600 text-white text-[9px] font-medium flex items-center gap-1 transition-colors shadow-xs cursor-pointer pointer-events-auto"
+                      title="Tiene transcripción. Clic para regenerar o limpiar"
+                    >
+                      <FileText className="w-2.5 h-2.5" />
+                      <span>Transcrito</span>
+                    </button>
+                  )}
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    <MediaInfoPopover media={media} onSeekToCaption={handleSeekToCaption} />
+                    <MediaInfoPopover
+                      media={media}
+                      onSeekToCaption={handleSeekToCaption}
+                      onTranscribe={() => setTranscribeDialogOpen(true)}
+                      onDeleteTranscript={handleDeleteTranscript}
+                    />
                   </div>
                 </div>
               )}

@@ -991,10 +991,18 @@ export function usePreviewRendererController({
     ) {
       scrubRequestedFrameRef.current = targetFrame
       void resumeScrubLoopRef.current()
+    } else if (!scrubRenderer && currentFrameInvalidated && forceFastScrubOverlay) {
+      void ensureFastScrubRenderer().then((renderer) => {
+        if (renderer) {
+          scrubRequestedFrameRef.current = targetFrame
+          void resumeScrubLoopRef.current()
+        }
+      })
     }
   }, [
     bgTransitionRendererRef,
     bgTransitionRendererStructureKeyRef,
+    ensureFastScrubRenderer,
     fastScrubRendererStructureKey,
     fastScrubScaledKeyframes,
     fastScrubScaledTracks,
@@ -1060,6 +1068,19 @@ export function usePreviewRendererController({
     const scrubRendererMatchesStructure =
       scrubRendererStructureKeyRef.current === fastScrubRendererStructureKey
     if (!scrubRenderer || !scrubRendererMatchesStructure) {
+      if (forceFastScrubOverlay) {
+        void ensureFastScrubRenderer().then((renderer) => {
+          if (!renderer) return
+          const playbackState = usePlaybackStore.getState()
+          const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame
+          renderer.invalidateFrameCache({ frames: [targetFrame] })
+          if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
+            scrubOffscreenRenderedFrameRef.current = null
+          }
+          scrubRequestedFrameRef.current = targetFrame
+          void resumeScrubLoopRef.current()
+        })
+      }
       return
     }
 
@@ -1082,6 +1103,7 @@ export function usePreviewRendererController({
     scrubRequestedFrameRef.current = targetFrame
     void resumeScrubLoopRef.current()
   }, [
+    ensureFastScrubRenderer,
     fastScrubRendererStructureKey,
     forceFastScrubOverlay,
     committedPreviewSnapshotRef,
@@ -1094,6 +1116,27 @@ export function usePreviewRendererController({
     scrubRequestedFrameRef,
     showFastScrubOverlayRef,
     showPlaybackTransitionOverlayRef,
+  ])
+
+  useEffect(() => {
+    if (!forceFastScrubOverlay) return
+    const playbackState = usePlaybackStore.getState()
+    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame
+    void ensureFastScrubRenderer().then((renderer) => {
+      if (!renderer) return
+      renderer.invalidateFrameCache({ frames: [targetFrame] })
+      if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
+        scrubOffscreenRenderedFrameRef.current = null
+      }
+      scrubRequestedFrameRef.current = targetFrame
+      void resumeScrubLoopRef.current()
+    })
+  }, [
+    forceFastScrubOverlay,
+    ensureFastScrubRenderer,
+    resumeScrubLoopRef,
+    scrubOffscreenRenderedFrameRef,
+    scrubRequestedFrameRef,
   ])
 
   useEffect(() => {
@@ -1328,15 +1371,14 @@ export function usePreviewRendererController({
                 return null
               }
 
-              if (scrubOffscreenRenderedFrameRef.current !== request.frame) {
-                // Only the render pump may render into and tag the shared
-                // offscreen surface. A warm request can outlive an edit and
-                // overlap a ruler skim; rendering here would let both owners
-                // clear the same canvas and publish a black/stale frame.
-                scrubRequestedFrameRef.current = request.frame
-                return true
+              try {
+                renderer.invalidateFrameCache?.()
+              } catch {
+                // Best effort
               }
-              return false
+              scrubOffscreenRenderedFrameRef.current = null
+              scrubRequestedFrameRef.current = request.frame
+              return true
             })
             if (shouldResumeRenderPump) {
               void resumeScrubLoopRef.current()

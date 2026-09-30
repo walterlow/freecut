@@ -12,6 +12,19 @@ export const WHISPER_AUTO_LANGUAGE_VALUE = 'auto'
 export function normalizeSelectableWhisperModel(
   model: MediaTranscriptModel | undefined,
 ): MediaTranscriptModel {
+  if (!model) {
+    return DEFAULT_BROWSER_WHISPER_MODEL
+  }
+  if (
+    model.startsWith('ollama:') ||
+    model.startsWith('groq:') ||
+    model.startsWith('openai:') ||
+    model.startsWith('gemini:') ||
+    model.startsWith('cloud:') ||
+    model.startsWith('custom:')
+  ) {
+    return model
+  }
   return normalizeSelectableBrowserWhisperModel(model)
 }
 

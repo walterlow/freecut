@@ -7,6 +7,7 @@ import type { TextStylePresetId } from '@/shared/typography/text-style-preset-id
 import type { TextMotionSpec } from './text-motion'
 import type { TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
 import type { CompositionControlOverrides } from './composition-controls'
+import type { Projection360Settings } from './projection360'
 
 export interface TimelineItemCornerPin {
   topLeft: [number, number]
@@ -22,6 +23,7 @@ export interface TimelineTranscriptCaptionCue {
   startSeconds: number
   endSeconds: number
   text: string
+  words?: SubtitleCueWord[]
 }
 
 export type TimelineTranscriptCaptionStyle = TextStyleFields & {
@@ -169,6 +171,8 @@ type BaseTimelineItem = {
   // Corner pin transform (perspective warp)
   cornerPin?: TimelineItemCornerPin
   transcriptCaptions?: TimelineTranscriptCaptions
+  // 360° Equirectangular Projection and FOV Options
+  projection360?: Projection360Settings
 }
 
 export interface GeneratedCaptionSource {
@@ -406,12 +410,22 @@ export type CompositionItem = BaseTimelineItem & {
  * model as imported SRT/VTT, so a cue payload survives `from` changes,
  * trims, and splits without rewriting timestamps.
  */
+export interface SubtitleCueWord {
+  word: string
+  start: number
+  end: number
+  confidence?: number
+}
+
 export interface SubtitleSegmentCue {
   id: string
   startSeconds: number
   endSeconds: number
   text: string
+  words?: SubtitleCueWord[]
 }
+
+export type CaptionAnimationStyle = 'none' | 'hormozi' | 'mrbeast' | 'karaoke' | 'bounce'
 
 /**
  * One timeline item that owns an entire subtitle track's cues.
@@ -435,6 +449,8 @@ export type SubtitleSegmentItem = BaseTimelineItem &
     /** Cue list, sorted by `startSeconds`. Times are segment-relative. */
     cues: SubtitleSegmentCue[]
     color: string
+    captionAnimationStyle?: CaptionAnimationStyle
+    captionHighlightColor?: string
   }
 
 export type SubtitleSegmentSource =

@@ -435,7 +435,7 @@ export const PreviewStage = memo(function PreviewStage({
                     zIndex: 4,
                     visibility: isRenderedOverlayVisible ? 'visible' : 'hidden',
                     clipPath: isSplitGradeComparison ? splitClipPath : undefined,
-                    backgroundColor: '#000',
+                    backgroundColor: isSplitGradeComparison ? '#000' : 'transparent',
                   }}
                 >
                   <canvas

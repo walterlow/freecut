@@ -23,6 +23,15 @@
     "toastRemoved": "Se eliminaron {{count}} clip(s)",
     "toastNothingRemoved": "No se eliminó nada",
     "toastRemoveFailed": "No se pudieron eliminar las palabras seleccionadas",
-    "toastTranscribeFailed": "La transcripción falló"
+    "toastTranscribeFailed": "La transcripción falló",
+    "styles": "Estilos",
+    "styleButton": "Estilos",
+    "styleButtonTooltip": "Personalizar tipografía, sombra, contorno, fondo y animaciones",
+    "styleDialogTitle": "Estilo de Subtítulos",
+    "styleDialogDesc": "Personaliza la tipografía, grosor, color, borde, sombra, recuadro de fondo y animaciones de los subtítulos.",
+    "wordUpdated": "Palabra actualizada",
+    "wordUpdateFailed": "Error al actualizar palabra",
+    "toastReplacedAll": "Se reemplazaron {{count}} palabras",
+    "toastNoMatches": "No se encontraron coincidencias"
   }
 }

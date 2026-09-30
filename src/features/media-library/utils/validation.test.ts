@@ -42,6 +42,18 @@ describe('validation', () => {
     expect(validateMediaFile(svg)).toEqual({ valid: true })
   })
 
+  it('accepts Insta360 native .insv and .insp files', () => {
+    const insv = new File(['data'], 'insta_video.insv', { type: '' })
+    const insp = new File(['data'], 'insta_photo.insp', { type: '' })
+
+    expect(getMimeType(insv)).toBe('video/mp4')
+    expect(getMimeType(insp)).toBe('image/jpeg')
+    expect(getMediaType(getMimeType(insv))).toBe('video')
+    expect(getMediaType(getMimeType(insp))).toBe('image')
+    expect(validateMediaFile(insv)).toEqual({ valid: true })
+    expect(validateMediaFile(insp)).toEqual({ valid: true })
+  })
+
   it('classifies alternate supported MIME types correctly', () => {
     expect(getMediaType('video/matroska')).toBe('video')
     expect(getMediaType('audio/x-m4a')).toBe('audio')

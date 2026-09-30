@@ -27,4 +27,8 @@ export {
   resolveTransitionParticipantRenderState,
 } from './transition'
 
-export { renderItemGpuEffectsToTexture, renderPreviewVideoGpuEffectsToCanvas } from './gpu'
+export {
+  renderItemGpuEffectsToTexture,
+  renderPreviewVideoGpuEffectsToCanvas,
+  clearPreviewGpuEffectFrameCache,
+} from './gpu'

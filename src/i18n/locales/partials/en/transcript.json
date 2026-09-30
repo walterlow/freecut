@@ -23,6 +23,15 @@
     "toastRemoved": "Removed {{count}} clip(s)",
     "toastNothingRemoved": "Nothing was removed",
     "toastRemoveFailed": "Could not remove the selected words",
-    "toastTranscribeFailed": "Transcription failed"
+    "toastTranscribeFailed": "Transcription failed",
+    "styles": "Styles",
+    "styleButton": "Styles",
+    "styleButtonTooltip": "Customize font, shadow, stroke, background and animations",
+    "styleDialogTitle": "Subtitle Styles",
+    "styleDialogDesc": "Customize font family, weight, color, outline, drop shadow, background box, and word animations.",
+    "wordUpdated": "Word updated",
+    "wordUpdateFailed": "Failed to update word",
+    "toastReplacedAll": "Replaced {{count}} words",
+    "toastNoMatches": "No matches found"
   }
 }

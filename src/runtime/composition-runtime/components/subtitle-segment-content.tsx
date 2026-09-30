@@ -2,18 +2,14 @@ import React, { useMemo } from 'react'
 
 import { useSequenceContext } from '@/runtime/composition-runtime/deps/player'
 import { parseSubtitleCueText } from '@/shared/utils/subtitle-cue-format'
-import type { SubtitleSegmentItem, TextItem } from '@/types/timeline'
+import type { SubtitleSegmentItem, TextItem, TextSpan } from '@/types/timeline'
 
 import { useVideoConfig } from '../hooks/use-player-compat'
 import { TextContent } from './text-content'
 
 /**
- * Renders the active cue of a {@link SubtitleSegmentItem} per frame.
- *
- * A subtitle segment owns its full cue list — instead of stamping out N
- * TextItems, we resolve the cue active at the current sequence frame and
- * reuse {@link TextContent} so all of TextItem's styling (font loading,
- * text shadow, stroke, alignment) Just Works.
+ * Renders the active cue of a {@link SubtitleSegmentItem} per frame,
+ * with reactive word-by-word animation (Hormozi, MrBeast, Karaoke).
  */
 export const SubtitleSegmentContent: React.FC<{
   item: SubtitleSegmentItem & { _sequenceFrameOffset?: number }
@@ -29,17 +25,76 @@ export const SubtitleSegmentContent: React.FC<{
   )
 
   // Parse inline markup (<i>, <b>, <u>, <font color>) into formatted spans
-  // and pull off any ASS `{\anN}` positioning override so the cue can land
-  // top-of-screen (used for sign translations / on-screen labels).
   const parsed = useMemo(
     () => (activeCue ? parseSubtitleCueText(activeCue.text) : null),
     [activeCue],
   )
 
-  // Synthesize an ephemeral TextItem that carries the active cue's text and
-  // the segment's typography. Keyframe/gizmo lookups by id will miss (the
-  // segment isn't a TextItem) — that's fine for now; segment-level keyframes
-  // are a planned follow-up.
+  // Build dynamic animated word spans for Hormozi / TikTok / Karaoke effects
+  const dynamicSpans = useMemo<TextSpan[] | undefined>(() => {
+    if (!activeCue || !parsed || parsed.isEmpty) return undefined
+    const animStyle = item.captionAnimationStyle
+    if (!animStyle || animStyle === 'none') {
+      return parsed.spans
+    }
+
+    const highlightColor = item.captionHighlightColor || '#FFEB3B'
+    const defaultColor = item.color || '#ffffff'
+    const isHormozi = animStyle === 'hormozi'
+    const isMrBeast = animStyle === 'mrbeast'
+    const isKaraoke = animStyle === 'karaoke'
+    const isBounce = animStyle === 'bounce'
+    const baseFontSize = item.fontSize ?? 48
+
+    // Use Whisper word timestamps if available, otherwise interpolate across cue duration
+    let wordEntries = activeCue.words
+    if (!wordEntries || wordEntries.length === 0) {
+      const tokens = parsed.plainText.trim().split(/\s+/).filter(Boolean)
+      const cueDur = Math.max(0.1, activeCue.endSeconds - activeCue.startSeconds)
+      const tokenDur = cueDur / Math.max(1, tokens.length)
+      wordEntries = tokens.map((w, idx) => ({
+        word: w,
+        start: activeCue.startSeconds + idx * tokenDur,
+        end: activeCue.startSeconds + (idx + 1) * tokenDur,
+      }))
+    }
+
+    return wordEntries.map((w, i) => {
+      const isActive = secondsIntoSegment >= w.start && secondsIntoSegment < w.end
+      const isPast = secondsIntoSegment >= w.end
+      const rawWord = isHormozi || isMrBeast ? w.word.toUpperCase() : w.word
+      const text = i < wordEntries.length - 1 ? `${rawWord} ` : rawWord
+
+      let wordColor = defaultColor
+      if (isActive) {
+        wordColor = highlightColor
+      } else if (isKaraoke && !isPast) {
+        wordColor = 'rgba(255, 255, 255, 0.4)'
+      }
+
+      const activeScale = isBounce ? 1.15 : isMrBeast ? 1.08 : undefined
+      const spanFontSize = isActive && activeScale ? Math.round(baseFontSize * activeScale) : undefined
+
+      return {
+        text,
+        color: wordColor,
+        fontSize: spanFontSize,
+        fontWeight: isActive || isHormozi || isMrBeast ? 'bold' : (item.fontWeight ?? 'normal'),
+        underline: isKaraoke && isActive,
+      }
+    })
+  }, [
+    activeCue,
+    parsed,
+    secondsIntoSegment,
+    item.captionAnimationStyle,
+    item.captionHighlightColor,
+    item.color,
+    item.fontSize,
+    item.fontWeight,
+  ])
+
+  // Synthesize an ephemeral TextItem that carries the active cue's text and typography
   const syntheticTextItem = useMemo<TextItem & { _sequenceFrameOffset?: number }>(
     () => ({
       id: item.id,
@@ -51,10 +106,8 @@ export const SubtitleSegmentContent: React.FC<{
       mediaId: item.mediaId,
       transform: item.transform,
       text: parsed?.plainText ?? '',
-      // textSpans drives styled per-run rendering — italic / bold / colored
-      // fragments inside one cue. TextContent prefers spans over `text`
-      // when both are present.
-      textSpans: parsed?.spans,
+      textSpans: dynamicSpans ?? parsed?.spans,
+      spanLayout: dynamicSpans ? 'inline' : undefined,
       fontSize: item.fontSize,
       fontFamily: item.fontFamily,
       fontWeight: item.fontWeight,
@@ -72,7 +125,7 @@ export const SubtitleSegmentContent: React.FC<{
       stroke: item.stroke,
       _sequenceFrameOffset: item._sequenceFrameOffset,
     }),
-    [parsed, item],
+    [parsed, dynamicSpans, item],
   )
 
   if (!activeCue || !parsed || parsed.isEmpty) return null
@@ -81,9 +134,7 @@ export const SubtitleSegmentContent: React.FC<{
 
 /**
  * Binary search for the cue whose `[startSeconds, endSeconds)` window
- * contains `seconds`. Cues are pre-sorted by startSeconds at insertion
- * time, so we can cut the per-frame cost from O(n) to O(log n) — meaningful
- * on a 65-min episode with 600+ cues.
+ * contains `seconds`.
  */
 function findActiveCue<T extends { startSeconds: number; endSeconds: number }>(
   cues: readonly T[],

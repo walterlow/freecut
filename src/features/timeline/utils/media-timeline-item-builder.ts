@@ -1,4 +1,9 @@
 import type { AudioItem, ImageItem, LottieItem, TimelineItem, VideoItem } from '@/types/timeline'
+import {
+  DEFAULT_PROJECTION_360_SETTINGS,
+  is360Filename,
+  isEquirectangularDimensions,
+} from '@/types/projection360'
 import { computeInitialTransform } from './transform-init'
 
 export type MediaTimelineItemType = 'video' | 'audio' | 'image' | 'lottie'
@@ -152,11 +157,32 @@ export function buildMediaTimelineItem(params: {
 
   const sourceWidth = params.media.width || params.canvasWidth
   const sourceHeight = params.media.height || params.canvasHeight
+  const isSpherical360 =
+    params.media.projectionType === 'spherical_360' ||
+    params.media.is360 === true ||
+    (params.media.projectionType !== 'ultrawide' &&
+      ((params.media.width &&
+        params.media.height &&
+        isEquirectangularDimensions(params.media.width, params.media.height)) ||
+        is360Filename(params.label)))
+  const isUltrawide =
+    params.media.projectionType === 'ultrawide' ||
+    (!isSpherical360 &&
+      params.media.width &&
+      params.media.height &&
+      params.media.width / params.media.height >= 1.85)
+  const projection360 = isSpherical360
+    ? { ...DEFAULT_PROJECTION_360_SETTINGS, sourceMode: 'spherical_360' as const, preset: 'linear' as const, enabled: true }
+    : isUltrawide
+      ? { ...DEFAULT_PROJECTION_360_SETTINGS, sourceMode: 'ultrawide' as const, preset: 'linear' as const, enabled: false }
+      : undefined
+
   const visualFields = {
     src: params.blobUrl,
     thumbnailUrl: params.thumbnailUrl || undefined,
     sourceWidth: params.media.width || undefined,
     sourceHeight: params.media.height || undefined,
+    projection360,
     transform: computeInitialTransform(
       sourceWidth,
       sourceHeight,

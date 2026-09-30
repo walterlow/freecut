@@ -6,7 +6,14 @@ import { makeTimelineAudioItem, makeTimelineTrack, makeTimelineVideoItem } from 
 import { useItemsStore } from '../items-store'
 import { useTimelineCommandStore } from '../timeline-command-store'
 import { useTimelineSettingsStore } from '../timeline-settings-store'
-import { addEffect, addEffects, removeEffect, toggleEffect, updateEffect } from './effect-actions'
+import {
+  addEffect,
+  addEffects,
+  clearEffects,
+  removeEffect,
+  toggleEffect,
+  updateEffect,
+} from './effect-actions'
 
 function makeBrightness(value = 0.5): VisualEffect {
   return { type: 'gpu-effect', gpuEffectType: 'gpu-brightness', params: { brightness: value } }
@@ -85,6 +92,18 @@ describe('effect actions', () => {
 
     removeEffect('a', effectId)
     expect(getEffects('a')).toHaveLength(0)
+  })
+
+  it('clearEffects removes all effects and supports undo', () => {
+    addEffect('a', makeBrightness(0.3))
+    addEffect('a', makeBrightness(0.7))
+    expect(getEffects('a')).toHaveLength(2)
+
+    clearEffects('a')
+    expect(getEffects('a')).toHaveLength(0)
+
+    useTimelineCommandStore.getState().undo()
+    expect(getEffects('a')).toHaveLength(2)
   })
 
   it('undo restores the pre-add state', () => {

@@ -93,6 +93,7 @@ import {
 import {
   renderItem,
   renderTransitionToGpuTexture,
+  clearPreviewGpuEffectFrameCache,
   type CanvasSettings,
   type WorkerLoadedImage,
   type ItemRenderContext,
@@ -2779,6 +2780,7 @@ export async function createCompositionRenderer(
       frameSceneRevision += 1
       frameSceneCache.invalidate(request)
       scrubbingCache?.invalidate(request)
+      clearPreviewGpuEffectFrameCache(itemRenderContext)
     },
 
     /** Get the scrubbing cache instance for stats/GPU wiring. */

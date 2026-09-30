@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Cpu, Loader2 } from 'lucide-react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
+import { usePrefersReducedMotion } from '@/shared/hooks/use-prefers-reduced-motion'
 import {
   formatEstimatedBytes,
   getLocalInferenceSummary,
@@ -14,7 +15,7 @@ export function LocalInferenceStatusPill() {
   const { t } = useTranslation()
   const runtimesById = useLocalInferenceStore((state) => state.runtimesById)
   const summary = useMemo(() => getLocalInferenceSummary(runtimesById), [runtimesById])
-  const prefersReducedMotion = useReducedMotion()
+  const prefersReducedMotion = usePrefersReducedMotion()
   const enterY = prefersReducedMotion ? 0 : -4
 
   function getStateLabel(summary: LocalInferenceSummary): string {

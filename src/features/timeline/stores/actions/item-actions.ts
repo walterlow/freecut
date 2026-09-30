@@ -42,6 +42,8 @@ import { pruneEmptyLayerGroupHierarchy } from '../../utils/group-utils'
 import { placeItemsWithoutTimelineOverlap } from './item-placement'
 import { useReverseConformDialogStore } from '../reverse-conform-dialog-store'
 import { buildLinkedAudioForVideo } from '../../utils/embedded-audio-split'
+import { getLinkedAudioCompanion } from '@/shared/utils/linked-media'
+import { requestPostEditWarmForItems } from './edit/shared'
 import {
   resolveItemTransformAtFrame,
   resolveItemTransformAtRelativeFrame,
@@ -106,18 +108,18 @@ function isInvalidTransformParentUpdate(
   if (!child || !canParticipateInTransformHierarchy(child)) return true
   return Boolean(
     context.parentItemId &&
-      (wouldCreateTransformParentCycle(
-          childItemId,
-          context.parentItemId,
-          context.getItem,
-          context.getKeyframes,
-        ) ||
-        hasRedundantTransformParentLink(
-          childItemId,
-          context.parentItemId,
-          context.getItem,
-          context.getKeyframes,
-        )),
+    (wouldCreateTransformParentCycle(
+      childItemId,
+      context.parentItemId,
+      context.getItem,
+      context.getKeyframes,
+    ) ||
+      hasRedundantTransformParentLink(
+        childItemId,
+        context.parentItemId,
+        context.getItem,
+        context.getKeyframes,
+      )),
   )
 }
 
@@ -675,6 +677,63 @@ export function addItemWithLinkedAudio(video: VideoItem): void {
     },
     { itemId: updatedVideo.id, audioId: audioItem.id, trackCreated: !!newTrack },
   )
+}
+
+/**
+ * Extract embedded audio from an existing video item onto an independent audio track.
+ * Mutes the embedded audio on the video item and places the companion audio item
+ * on a free audio track (creating one if necessary).
+ */
+export function extractAudioFromVideo(videoId: string): string | null {
+  const itemsState = useItemsStore.getState()
+  const video = itemsState.items.find((i) => i.id === videoId && i.type === 'video') as
+    | VideoItem
+    | undefined
+  if (!video) return null
+
+  // If already linked to companion audio, select and return existing companion id
+  const existingCompanion = getLinkedAudioCompanion(itemsState.items, video)
+  if (existingCompanion) {
+    useSelectionStore.getState().selectItems([existingCompanion.id])
+    return existingCompanion.id
+  }
+
+  const itemsByTrackId = new Map<string, TimelineItem[]>()
+  for (const item of itemsState.items) {
+    const existing = itemsByTrackId.get(item.trackId)
+    if (existing) {
+      existing.push(item)
+    } else {
+      itemsByTrackId.set(item.trackId, [item])
+    }
+  }
+
+  const { updatedVideo, audioItem, newTrack } = buildLinkedAudioForVideo({
+    video: { ...video, embeddedAudioMuted: true },
+    tracks: itemsState.tracks,
+    itemsByTrackId,
+  })
+
+  execute(
+    'EXTRACT_AUDIO_FROM_VIDEO',
+    () => {
+      const store = useItemsStore.getState()
+      if (newTrack) {
+        store.setTracks([...store.tracks, newTrack])
+      }
+      store._updateItem(video.id, {
+        embeddedAudioMuted: true,
+        linkedGroupId: updatedVideo.linkedGroupId,
+      })
+      store._addItem(audioItem)
+      useTimelineSettingsStore.getState().markDirty()
+      requestPostEditWarmForItems([video.id, audioItem.id])
+    },
+    { videoId: video.id, audioId: audioItem.id, trackCreated: !!newTrack },
+  )
+
+  useSelectionStore.getState().selectItems([audioItem.id])
+  return audioItem.id
 }
 
 /**

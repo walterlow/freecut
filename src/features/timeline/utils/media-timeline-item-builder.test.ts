@@ -137,4 +137,23 @@ describe('buildMediaTimelineItems', () => {
     expect(audioItem?.sourceFps).toBe(30)
     expect(audioItem?.sourceEnd).toBe(90)
   })
+
+  it('automatically sets projection360 on 2:1 equirectangular or Insta360 media', () => {
+    const [pano360] = buildMediaTimelineItems({
+      media: makeMedia({ width: 5760, height: 2880 }),
+      mediaId: 'pano-1',
+      mediaType: 'video',
+      label: 'drone_360.insv',
+      projectFps: 30,
+      blobUrl: 'blob:video',
+      canvasWidth: 1920,
+      canvasHeight: 1080,
+      placements: { primary: { trackId: 'v1', from: 0, durationInFrames: 90 } },
+    })
+
+    expect(pano360?.projection360).toBeDefined()
+    expect(pano360?.projection360?.enabled).toBe(true)
+    expect(pano360?.projection360?.preset).toBe('linear')
+    expect(pano360?.projection360?.fov).toBe(78)
+  })
 })

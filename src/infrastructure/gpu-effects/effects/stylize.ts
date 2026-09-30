@@ -2871,3 +2871,198 @@ fn pixelSortHqMain(@builtin(global_invocation_id) gid: vec3u) {
       0,
     ]),
 }
+
+export const cinematicHalation: GpuEffectDefinition = {
+  id: 'gpu-cinematic-halation',
+  name: 'Cinematic Halation',
+  category: 'stylize',
+  entryPoint: 'halationFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct HalationParams {
+  threshold: f32,
+  radius: f32,
+  intensity: f32,
+  warmth: f32,
+  width: f32,
+  height: f32,
+  _pad1: f32,
+  _pad2: f32,
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: HalationParams;
+
+@fragment
+fn halationFragment(input: VertexOutput) -> @location(0) vec4f {
+  let color = textureSample(inputTex, texSampler, input.uv);
+  let luma = luminance(color.rgb);
+  let highlight = max(0.0, luma - params.threshold) / max(0.001, 1.0 - params.threshold);
+
+  let texel = vec2f(params.radius / max(1.0, params.width), params.radius / max(1.0, params.height));
+  var halo = vec3f(0.0);
+  let offsets = array<vec2f, 8>(
+    vec2f(-1.0, -1.0), vec2f(0.0, -1.4), vec2f(1.0, -1.0),
+    vec2f(-1.4, 0.0),                     vec2f(1.4, 0.0),
+    vec2f(-1.0, 1.0),  vec2f(0.0, 1.4),  vec2f(1.0, 1.0)
+  );
+  for (var i = 0u; i < 8u; i = i + 1u) {
+    let s = textureSample(inputTex, texSampler, input.uv + offsets[i] * texel * 3.0);
+    let sl = luminance(s.rgb);
+    let sh = max(0.0, sl - params.threshold);
+    halo = halo + s.rgb * sh;
+  }
+  halo = halo / 8.0;
+
+  let warmTint = mix(vec3f(1.0, 0.25, 0.05), vec3f(1.0, 0.5, 0.1), params.warmth);
+  let halation = halo * warmTint * params.intensity * 2.5;
+
+  let result = color.rgb + halation;
+  return vec4f(clamp(result, vec3f(0.0), vec3f(1.0)), color.a);
+}`,
+  params: {
+    threshold: {
+      type: 'number',
+      label: 'Threshold',
+      default: 0.65,
+      min: 0.2,
+      max: 0.98,
+      step: 0.01,
+      animatable: true,
+    },
+    radius: {
+      type: 'number',
+      label: 'Radius',
+      default: 1.2,
+      min: 0.1,
+      max: 5.0,
+      step: 0.1,
+      animatable: true,
+    },
+    intensity: {
+      type: 'number',
+      label: 'Intensity',
+      default: 1.0,
+      min: 0.0,
+      max: 3.0,
+      step: 0.05,
+      animatable: true,
+    },
+    warmth: {
+      type: 'number',
+      label: 'Warmth',
+      default: 0.5,
+      min: 0.0,
+      max: 1.0,
+      step: 0.05,
+      animatable: true,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.threshold as number) ?? 0.65,
+      (p.radius as number) ?? 1.2,
+      (p.intensity as number) ?? 1.0,
+      (p.warmth as number) ?? 0.5,
+      w,
+      h,
+      0,
+      0,
+    ]),
+}
+
+export const anamorphicFlare: GpuEffectDefinition = {
+  id: 'gpu-anamorphic-flare',
+  name: 'Anamorphic Lens Flare',
+  category: 'stylize',
+  entryPoint: 'anamorphicFlareFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct AnamorphicFlareParams {
+  threshold: f32,
+  streakLength: f32,
+  intensity: f32,
+  tint: f32,
+  width: f32,
+  height: f32,
+  _pad1: f32,
+  _pad2: f32,
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: AnamorphicFlareParams;
+
+@fragment
+fn anamorphicFlareFragment(input: VertexOutput) -> @location(0) vec4f {
+  let color = textureSample(inputTex, texSampler, input.uv);
+  let dx = (params.streakLength * 12.0) / max(1.0, params.width);
+
+  var streak = vec3f(0.0);
+  let samples = 8;
+  for (var i = -8; i <= 8; i = i + 1) {
+    let offset = vec2f(f32(i) * dx, 0.0);
+    let s = textureSample(inputTex, texSampler, input.uv + offset);
+    let sl = luminance(s.rgb);
+    let weight = exp(-abs(f32(i)) * 0.22);
+    let sh = max(0.0, sl - params.threshold);
+    streak = streak + s.rgb * sh * weight;
+  }
+  streak = streak / 17.0;
+
+  let cyanBlue = mix(vec3f(0.1, 0.6, 1.0), vec3f(0.3, 0.9, 1.0), params.tint);
+  let flare = streak * cyanBlue * params.intensity * 4.0;
+
+  let result = color.rgb + flare;
+  return vec4f(clamp(result, vec3f(0.0), vec3f(1.0)), color.a);
+}`,
+  params: {
+    threshold: {
+      type: 'number',
+      label: 'Threshold',
+      default: 0.75,
+      min: 0.4,
+      max: 0.98,
+      step: 0.01,
+      animatable: true,
+    },
+    streakLength: {
+      type: 'number',
+      label: 'Streak Length',
+      default: 1.0,
+      min: 0.1,
+      max: 4.0,
+      step: 0.1,
+      animatable: true,
+    },
+    intensity: {
+      type: 'number',
+      label: 'Intensity',
+      default: 1.2,
+      min: 0.0,
+      max: 4.0,
+      step: 0.05,
+      animatable: true,
+    },
+    tint: {
+      type: 'number',
+      label: 'Cyan/Blue Tint',
+      default: 0.5,
+      min: 0.0,
+      max: 1.0,
+      step: 0.05,
+      animatable: true,
+    },
+  },
+  packUniforms: (p, w, h) =>
+    new Float32Array([
+      (p.threshold as number) ?? 0.75,
+      (p.streakLength as number) ?? 1.0,
+      (p.intensity as number) ?? 1.2,
+      (p.tint as number) ?? 0.5,
+      w,
+      h,
+      0,
+      0,
+    ]),
+}
+

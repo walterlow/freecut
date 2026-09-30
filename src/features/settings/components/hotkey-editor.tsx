@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
+import { usePrefersReducedMotion } from '@/shared/hooks/use-prefers-reduced-motion'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { AlertTriangle, Download, Keyboard, Plus, RotateCcw, Search, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -572,7 +573,7 @@ function computeHotkeyFilterCounts(
 
 export function HotkeyEditor() {
   const { t } = useTranslation()
-  const reduceMotion = useReducedMotion()
+  const reduceMotion = usePrefersReducedMotion()
   const hotkeys = useResolvedHotkeys()
   const hotkeyOverrides = useSettingsStore((state) => state.hotkeyOverrides)
   const setHotkeyBinding = useSettingsStore((state) => state.setHotkeyBinding)

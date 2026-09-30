@@ -7,11 +7,36 @@
 import type { ItemKeyframes } from '@/types/keyframe'
 import type { ItemEffect, GpuEffect } from '@/types/effects'
 import type { AdjustmentItem, TimelineItem } from '@/types/timeline'
+import type { Projection360Settings } from '@/types/projection360'
 import { createLogger } from '@/shared/logging/logger'
 import type { EffectsPipeline, GpuEffectInstance } from '@/infrastructure/gpu-effects'
 import { applyMasks, type MaskCanvasSettings } from './canvas-masks'
 import type { CanvasPool } from './canvas-pool'
 import { resolveAnimatedColorEffects } from '@/features/export/deps/keyframes'
+
+export function createProjection360ItemEffect(projection: Projection360Settings): ItemEffect {
+  return {
+    id: 'internal-projection-360',
+    enabled: projection.enabled !== false,
+    effect: {
+      type: 'gpu-effect',
+      gpuEffectType: 'gpu-projection-360',
+      params: {
+        enabled: projection.enabled !== false,
+        preset: projection.preset,
+        fov: projection.fov,
+        distance: projection.distance,
+        distortion: projection.distortion,
+        yaw: projection.yaw,
+        pitch: projection.pitch,
+        roll: projection.roll,
+        horizonLock: projection.horizonLock,
+        horizonOffset: projection.horizonOffset,
+        sourceMode: projection.sourceMode ?? 'ultrawide',
+      },
+    },
+  }
+}
 
 const log = createLogger('CanvasEffects')
 

@@ -20,8 +20,23 @@ import {
   Captions,
   Sticker,
   WandSparkles,
+  AudioWaveform,
+  Eye,
+  EyeOff,
+  Check,
+  X,
+  Sparkles,
+  Trash2,
+  AlertTriangle,
+  Eraser,
 } from 'lucide-react'
-import { motion, useReducedMotion } from 'motion/react'
+import { toast } from 'sonner'
+import { useGizmoStore } from '@/features/editor/deps/preview'
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
+import { AudioTabPanel } from './audio-tab'
+import type { ItemEffect } from '@/types/effects'
+import { motion } from 'motion/react'
+import { usePrefersReducedMotion } from '@/shared/hooks/use-prefers-reduced-motion'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/shared/ui/cn'
 import { useEditorStore } from '@/shared/state/editor'
@@ -53,9 +68,9 @@ import {
 import { addAdjustmentLayer } from '../utils/add-adjustment-layer'
 import type { TextItem, ShapeItem, ShapeType } from '@/types/timeline'
 import { useMaskEditorStore } from '@/features/editor/deps/preview'
-import type { VisualEffect, GpuEffect } from '@/types/effects'
+import type { VisualEffect } from '@/types/effects'
 import { EFFECT_PRESETS } from '@/types/effects'
-import { getGpuEffectDefaultParams } from '@/infrastructure/gpu-effects'
+import { getGpuEffect, getGpuEffectDefaultParams } from '@/infrastructure/gpu-effects'
 import { EffectThumbnail, useGpuEffectPreviewData } from '@/features/editor/deps/effects-contract'
 import { createLogger } from '@/shared/logging/logger'
 import { useSettingsStore } from '@/features/editor/deps/settings'
@@ -299,7 +314,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
   const setActiveTab = useEditorStore((s) => s.setActiveTab)
   const sidebarWidth = useEditorStore((s) => s.sidebarWidth)
   const setSidebarWidth = useEditorStore((s) => s.setSidebarWidth)
-  const prefersReducedMotion = useReducedMotion()
+  const prefersReducedMotion = usePrefersReducedMotion()
 
   const [aiTabActivated, setAiTabActivated] = useState(activeTab === 'ai')
   // The Lottie panel hits an external API on mount, so keep it unmounted until
@@ -431,8 +446,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     const { tracks, fps, addItemOnNewTrack } = useTimelineStore.getState()
     const { activeTrackId, selectItems, setActiveTrack } = useSelectionStore.getState()
     const currentProject = useProjectStore.getState().currentProject
-    const activeCompositionId =
-      useCompositionNavigationStore.getState().activeCompositionId
+    const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId
     const activeComposition = activeCompositionId
       ? useCompositionsStore.getState().getComposition(activeCompositionId)
       : undefined
@@ -475,46 +489,291 @@ export const MediaSidebar = memo(function MediaSidebar() {
     addAdjustmentLayer(effects, label)
   }, [])
 
-  // Create adjustment layer with preset effects
-  const handleAddPreset = useCallback(
+  // Effect inspection & preview state
+  const [inspectingEffect, setInspectingEffect] = useState<{
+    kind: 'preset' | 'gpu'
+    id: string
+    name: string
+    effects: VisualEffect[]
+  } | null>(null)
+  const [isPreviewingOnPlayer, setIsPreviewingOnPlayer] = useState(false)
+
+  const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
+  const timelineItems = useTimelineStore((s) => s.items)
+  const selectedVisualItems = useMemo(() => {
+    return timelineItems.filter((i) => selectedItemIds.includes(i.id) && i.type !== 'audio')
+  }, [timelineItems, selectedItemIds])
+
+  const selectedVisualItemEffectsCount = useMemo(() => {
+    return selectedVisualItems.reduce((acc, item) => acc + (item.effects?.length || 0), 0)
+  }, [selectedVisualItems])
+
+  const totalProjectEffectsCount = useMemo(() => {
+    return timelineItems.reduce((acc, item) => acc + (item.effects?.length || 0), 0)
+  }, [timelineItems])
+
+  const adjustmentLayerItems = useMemo(() => {
+    return timelineItems.filter((i) => i.type === 'adjustment')
+  }, [timelineItems])
+
+  const hasSelectedVisualClip = selectedVisualItems.length > 0
+
+  const handleClearSelectedClipEffects = useCallback(() => {
+    if (selectedVisualItems.length === 0) {
+      toast.warning('Selecciona un clip en la línea de tiempo primero')
+      return
+    }
+    const { clearEffects } = useTimelineStore.getState()
+    selectedVisualItems.forEach((item) => {
+      clearEffects(item.id)
+    })
+    useGizmoStore.getState().clearPreview()
+    setIsPreviewingOnPlayer(false)
+    setInspectingEffect(null)
+    const currentFrame = usePlaybackStore.getState().currentFrame
+    const { items } = useTimelineStore.getState()
+    usePreviewBridgeStore.getState().requestPostEditWarm(
+      currentFrame,
+      items.map((i) => i.id),
+    )
+    usePreviewBridgeStore.getState().setDisplayedFrame(null)
+    toast.success('Efectos eliminados del clip seleccionado')
+  }, [selectedVisualItems])
+
+  const handleDeleteAdjustmentLayers = useCallback(() => {
+    const { removeItems, items } = useTimelineStore.getState()
+    const adjItems = items.filter((i) => i.type === 'adjustment')
+    if (adjItems.length === 0) return
+    removeItems(adjItems.map((adj) => adj.id))
+    useGizmoStore.getState().clearPreview()
+    setIsPreviewingOnPlayer(false)
+    setInspectingEffect(null)
+    const currentFrame = usePlaybackStore.getState().currentFrame
+    const freshItems = useTimelineStore.getState().items
+    usePreviewBridgeStore.getState().requestPostEditWarm(
+      currentFrame,
+      freshItems.map((i) => i.id),
+    )
+    usePreviewBridgeStore.getState().setDisplayedFrame(null)
+    toast.success(`${adjItems.length} capa(s) de ajuste eliminada(s) de la línea de tiempo`)
+  }, [])
+
+  const handleClearAllProjectEffects = useCallback(() => {
+    const { items, clearEffects, removeItems } = useTimelineStore.getState()
+    let clearedCount = 0
+
+    // 1. Remove all adjustment layers
+    const adjItemIds = items.filter((item) => item.type === 'adjustment').map((item) => item.id)
+    const removedLayersCount = adjItemIds.length
+    if (adjItemIds.length > 0) {
+      removeItems(adjItemIds)
+    }
+
+    // 2. Clear effects on all items
+    items.forEach((item) => {
+      if (item.effects && item.effects.length > 0) {
+        clearEffects(item.id)
+        clearedCount += item.effects.length
+      }
+    })
+
+    // 3. Force clean gizmo store preview
+    useGizmoStore.getState().clearPreview()
+    setIsPreviewingOnPlayer(false)
+    setInspectingEffect(null)
+
+    // 4. Invalidate frame caches & force player re-render
+    const currentFrame = usePlaybackStore.getState().currentFrame
+    const freshItems = useTimelineStore.getState().items
+    usePreviewBridgeStore.getState().requestPostEditWarm(
+      currentFrame,
+      freshItems.map((i) => i.id),
+    )
+    usePreviewBridgeStore.getState().setDisplayedFrame(null)
+
+    if (clearedCount > 0 || removedLayersCount > 0) {
+      toast.success(
+        `Video restablecido: ${clearedCount} efecto(s) eliminados${
+          removedLayersCount > 0 ? ` y ${removedLayersCount} capa(s) de ajuste quitadas` : ''
+        }.`,
+      )
+    } else {
+      toast.info('Video restablecido y memoria caché de efectos purgada.')
+    }
+  }, [])
+
+  // Clear live preview when switching away from effects tab or unmounting
+  useEffect(() => {
+    if (activeTab !== 'effects') {
+      if (isPreviewingOnPlayer) {
+        useGizmoStore.getState().clearPreview()
+        setIsPreviewingOnPlayer(false)
+        const currentFrame = usePlaybackStore.getState().currentFrame
+        const { items } = useTimelineStore.getState()
+        usePreviewBridgeStore.getState().requestPostEditWarm(
+          currentFrame,
+          items.map((i) => i.id),
+        )
+        usePreviewBridgeStore.getState().setDisplayedFrame(null)
+      }
+      setInspectingEffect(null)
+    }
+  }, [activeTab, isPreviewingOnPlayer])
+
+  useEffect(() => {
+    return () => {
+      useGizmoStore.getState().clearPreview()
+    }
+  }, [])
+
+  // Select preset for inspection instead of arbitrary auto-insertion
+  const handleSelectPresetForInspection = useCallback(
     (presetId: string) => {
       const preset = EFFECT_PRESETS.find((p) => p.id === presetId)
       if (!preset) return
-      handleAddAdjustmentLayer(preset.effects, preset.name)
-    },
-    [handleAddAdjustmentLayer],
-  )
-
-  // Add a single GPU effect ââ‚¬” to selected clips, or as adjustment layer if nothing selected
-  const handleAddGpuEffect = useCallback(
-    (gpuEffectId: string) => {
-      const { selectedItemIds } = useSelectionStore.getState()
-      const { items, addEffect } = useTimelineStore.getState()
-
-      // Find selected visual items (not audio)
-      const visualIds = selectedItemIds.filter((id) => {
-        const item = items.find((i) => i.id === id)
-        return item && item.type !== 'audio'
-      })
-
-      if (visualIds.length > 0) {
-        const defaults = getGpuEffectDefaultParams(gpuEffectId)
-        const effect: GpuEffect = {
-          type: 'gpu-effect',
-          gpuEffectType: gpuEffectId,
-          params: defaults,
-        }
-        visualIds.forEach((id) => addEffect(id, effect))
-      } else {
-        // No visual selection ââ‚¬” create adjustment layer with this effect
-        const defaults = getGpuEffectDefaultParams(gpuEffectId)
-        handleAddAdjustmentLayer([
-          { type: 'gpu-effect', gpuEffectType: gpuEffectId, params: defaults },
-        ])
+      if (isPreviewingOnPlayer) {
+        useGizmoStore.getState().clearPreview()
+        setIsPreviewingOnPlayer(false)
+        const currentFrame = usePlaybackStore.getState().currentFrame
+        const { items } = useTimelineStore.getState()
+        usePreviewBridgeStore.getState().requestPostEditWarm(
+          currentFrame,
+          items.map((i) => i.id),
+        )
+        usePreviewBridgeStore.getState().setDisplayedFrame(null)
       }
+      setInspectingEffect({
+        kind: 'preset',
+        id: preset.id,
+        name: preset.name,
+        effects: preset.effects,
+      })
     },
-    [handleAddAdjustmentLayer],
+    [isPreviewingOnPlayer],
   )
+
+  // Select GPU effect for inspection instead of arbitrary auto-insertion
+  const handleSelectGpuEffectForInspection = useCallback(
+    (gpuEffectId: string) => {
+      const defaults = getGpuEffectDefaultParams(gpuEffectId)
+      const def = getGpuEffect(gpuEffectId)
+      const effectName = def?.name || gpuEffectId
+      if (isPreviewingOnPlayer) {
+        useGizmoStore.getState().clearPreview()
+        setIsPreviewingOnPlayer(false)
+        const currentFrame = usePlaybackStore.getState().currentFrame
+        const { items } = useTimelineStore.getState()
+        usePreviewBridgeStore.getState().requestPostEditWarm(
+          currentFrame,
+          items.map((i) => i.id),
+        )
+        usePreviewBridgeStore.getState().setDisplayedFrame(null)
+      }
+      setInspectingEffect({
+        kind: 'gpu',
+        id: gpuEffectId,
+        name: effectName,
+        effects: [{ type: 'gpu-effect', gpuEffectType: gpuEffectId, params: defaults }],
+      })
+    },
+    [isPreviewingOnPlayer],
+  )
+
+  const handleCloseEffectInspector = useCallback(() => {
+    if (isPreviewingOnPlayer) {
+      useGizmoStore.getState().clearPreview()
+      setIsPreviewingOnPlayer(false)
+      const currentFrame = usePlaybackStore.getState().currentFrame
+      const { items } = useTimelineStore.getState()
+      usePreviewBridgeStore.getState().requestPostEditWarm(
+        currentFrame,
+        items.map((i) => i.id),
+      )
+      usePreviewBridgeStore.getState().setDisplayedFrame(null)
+    }
+    setInspectingEffect(null)
+  }, [isPreviewingOnPlayer])
+
+  // Toggle live effect preview on video player
+  const handleTogglePlayerPreview = useCallback(() => {
+    if (!inspectingEffect) return
+
+    if (isPreviewingOnPlayer) {
+      useGizmoStore.getState().clearPreview()
+      setIsPreviewingOnPlayer(false)
+      const currentFrame = usePlaybackStore.getState().currentFrame
+      const { items } = useTimelineStore.getState()
+      usePreviewBridgeStore.getState().requestPostEditWarm(
+        currentFrame,
+        items.map((i) => i.id),
+      )
+      usePreviewBridgeStore.getState().setDisplayedFrame(null)
+      return
+    }
+
+    const { selectedItemIds } = useSelectionStore.getState()
+    const { items } = useTimelineStore.getState()
+    const visualItems = items.filter((i) => i.type !== 'audio')
+
+    let targetItem = visualItems.find((i) => selectedItemIds.includes(i.id))
+    if (!targetItem && visualItems.length > 0) {
+      targetItem = visualItems[0]
+    }
+
+    if (!targetItem) {
+      toast.info('Añade un video o imagen a la línea de tiempo para previsualizar')
+      return
+    }
+
+    const previewEffects: ItemEffect[] = inspectingEffect.effects.map((eff, index) => ({
+      id: `preview-effect-${index}`,
+      effect: eff,
+      enabled: true,
+    }))
+
+    useGizmoStore.getState().setEffectsPreviewNew({ [targetItem.id]: previewEffects })
+    setIsPreviewingOnPlayer(true)
+  }, [inspectingEffect, isPreviewingOnPlayer])
+
+  // Explicitly apply to selected clip
+  const handleApplyToSelectedClip = useCallback(() => {
+    if (!inspectingEffect) return
+    const { selectedItemIds } = useSelectionStore.getState()
+    const { items, addEffect } = useTimelineStore.getState()
+    const visualIds = selectedItemIds.filter((id) => {
+      const item = items.find((i) => i.id === id)
+      return item && item.type !== 'audio'
+    })
+
+    if (visualIds.length === 0) {
+      toast.warning('Selecciona un clip en la línea de tiempo primero')
+      return
+    }
+
+    visualIds.forEach((id) => {
+      inspectingEffect.effects.forEach((eff) => addEffect(id, eff))
+    })
+
+    if (isPreviewingOnPlayer) {
+      useGizmoStore.getState().clearPreview()
+      setIsPreviewingOnPlayer(false)
+    }
+    setInspectingEffect(null)
+    toast.success(`Efecto "${inspectingEffect.name}" aplicado al clip`)
+  }, [inspectingEffect, isPreviewingOnPlayer])
+
+  // Explicitly insert as timeline block (adjustment layer)
+  const handleInsertAsTimelineBlock = useCallback(() => {
+    if (!inspectingEffect) return
+    handleAddAdjustmentLayer(inspectingEffect.effects, inspectingEffect.name)
+
+    if (isPreviewingOnPlayer) {
+      useGizmoStore.getState().clearPreview()
+      setIsPreviewingOnPlayer(false)
+    }
+    setInspectingEffect(null)
+    toast.success(`Bloque "${inspectingEffect.name}" añadido a la línea de tiempo`)
+  }, [handleAddAdjustmentLayer, inspectingEffect, isPreviewingOnPlayer])
 
   const { gpuCategories, triggerPreviews } = useGpuEffectPreviewData()
   // Which effect/preset tile is hovered — drives its live sweep animation.
@@ -536,6 +795,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
   // Category items for the vertical nav
   const categories = [
     { id: 'media' as const, icon: Film, label: t('editor.mediaSidebar.media') },
+    { id: 'audio' as const, icon: AudioWaveform, label: t('editor.mediaSidebar.audio', 'Audio') },
     { id: 'text' as const, icon: Type, label: t('editor.mediaSidebar.text') },
     { id: 'shapes' as const, icon: Pentagon, label: t('editor.mediaSidebar.shapes') },
     { id: 'effects' as const, icon: Layers, label: t('editor.mediaSidebar.effects') },
@@ -722,6 +982,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
               className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'media' ? 'block' : 'hidden'}`}
             >
               <MediaLibrary />
+            </div>
+
+            {/* Audio Tab - Project Audio & SFX */}
+            <div
+              className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'audio' ? 'block' : 'hidden'}`}
+            >
+              {activeTab === 'audio' && <AudioTabPanel />}
             </div>
 
             {/* Text Tab */}
@@ -1022,6 +1289,167 @@ export const MediaSidebar = memo(function MediaSidebar() {
               className={`min-h-0 flex-1 overflow-y-auto p-3 ${activeTab === 'effects' ? 'block' : 'hidden'}`}
             >
               <div className="space-y-3">
+                {/* Adjustment Layer Alert if active on timeline */}
+                {adjustmentLayerItems.length > 0 && (
+                  <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-2.5 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <div className="text-xs space-y-0.5">
+                        <span className="font-semibold text-amber-500 block">
+                          Capa de Ajuste activa en la línea de tiempo
+                        </span>
+                        <span className="text-muted-foreground text-[10px] block leading-tight">
+                          Hay {adjustmentLayerItems.length} capa(s) de ajuste aplicando efectos a
+                          los videos inferiores.
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={handleDeleteAdjustmentLayers}
+                      className="w-full h-7 text-xs gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Eliminar Capa(s) de Ajuste</span>
+                    </Button>
+                  </div>
+                )}
+
+                {/* Permanent Effects Action Toolbar - ALWAYS VISIBLE */}
+                <div className="rounded-lg border border-border bg-card p-2.5 space-y-2 shadow-sm">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span className="font-semibold text-foreground truncate">
+                        {selectedVisualItems.length > 0
+                          ? selectedVisualItems[0]?.label || 'Clip seleccionado'
+                          : 'Control de Efectos'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded shrink-0">
+                      {selectedVisualItems.length > 0
+                        ? `${selectedVisualItemEffectsCount} en clip`
+                        : `${totalProjectEffectsCount} en proyecto`}
+                    </span>
+                  </div>
+
+                  {selectedVisualItems.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleClearSelectedClipEffects}
+                      className="w-full h-7 text-xs gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                      title="Elimina todos los efectos del clip actualmente seleccionado"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Limpiar efectos del clip ({selectedVisualItemEffectsCount})</span>
+                    </Button>
+                  )}
+
+                  {isPreviewingOnPlayer && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleCloseEffectInspector}
+                      className="w-full h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Quitar preview del reproductor</span>
+                    </Button>
+                  )}
+
+                  {/* Red Master Clear / Reset Button - ALWAYS VISIBLE */}
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleClearAllProjectEffects}
+                    className="w-full h-8 text-xs font-semibold gap-1.5 bg-red-600 hover:bg-red-700 text-white shadow-sm"
+                    title="Elimina todos los efectos de todos los clips, capas de ajuste y purga la caché para restaurar el video original limpio"
+                  >
+                    <Eraser className="w-3.5 h-3.5" />
+                    <span>Restablecer Video (Eliminar todos los efectos)</span>
+                  </Button>
+                </div>
+                {/* Active Effect Inspection & Preview Card */}
+                {inspectingEffect && (
+                  <div className="rounded-lg border border-primary/40 bg-secondary/30 p-3 shadow-md space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-medium text-xs text-foreground min-w-0">
+                        <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span className="truncate">{inspectingEffect.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCloseEffectInspector}
+                        className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        title="Cerrar vista previa"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="w-full aspect-video rounded overflow-hidden border border-border bg-black/40">
+                      <EffectThumbnail
+                        effects={inspectingEffect.effects}
+                        active={true}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 pt-1">
+                      <Button
+                        size="sm"
+                        variant={isPreviewingOnPlayer ? 'default' : 'outline'}
+                        onClick={handleTogglePlayerPreview}
+                        className="w-full h-7 text-xs gap-1.5"
+                      >
+                        {isPreviewingOnPlayer ? (
+                          <>
+                            <EyeOff className="w-3.5 h-3.5" />
+                            <span>Desactivar Preview en Reproductor</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Previsualizar en Reproductor</span>
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleApplyToSelectedClip}
+                        disabled={!hasSelectedVisualClip}
+                        className="w-full h-7 text-xs gap-1.5"
+                        title={
+                          !hasSelectedVisualClip
+                            ? 'Selecciona un clip en la línea de tiempo'
+                            : undefined
+                        }
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>
+                          {hasSelectedVisualClip
+                            ? 'Aplicar al Clip Seleccionado'
+                            : 'Aplicar (Selecciona un clip)'}
+                        </span>
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleInsertAsTimelineBlock}
+                        className="w-full h-7 text-xs gap-1.5"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>Insertar en Línea de Tiempo como Bloque</span>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Blank Adjustment Layer */}
                 <button
                   draggable={true}
@@ -1068,7 +1496,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                         }
                         onClick={() => {
                           if (shouldSuppressGeneratedItemClick()) return
-                          handleAddPreset(preset.id)
+                          handleSelectPresetForInspection(preset.id)
                         }}
                         className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                       >
@@ -1112,7 +1540,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                           onMouseLeave={() => setHoveredEffectKey((k) => (k === def.id ? null : k))}
                           onClick={() => {
                             if (shouldSuppressGeneratedItemClick()) return
-                            handleAddGpuEffect(def.id)
+                            handleSelectGpuEffectForInspection(def.id)
                           }}
                           className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.98] group"
                         >

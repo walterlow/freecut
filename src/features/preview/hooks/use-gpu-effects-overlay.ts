@@ -47,6 +47,7 @@ function hasTextMotionSpec(item: TimelineItem): boolean {
 function needsRenderedOverlayPath(item: TimelineItem): boolean {
   return (
     hasEnabledGpuEffect(item.effects) ||
+    item.projection360?.enabled === true ||
     hasRenderableBlendMode(item) ||
     hasCornerPin(item.cornerPin) ||
     hasTextMotionSpec(item)
@@ -163,6 +164,7 @@ export function buildContinuousPreviewOverlayIndex(
   const candidateItems = items.filter((item) => {
     const effectiveEffects = previewEffectsByItemId?.get(item.id) ?? item.effects
     if (hasEnabledGpuEffect(effectiveEffects)) return true
+    if (item.projection360?.enabled) return true
     if (hasRenderableBlendMode(item)) return true
     if (hasCornerPin(item.cornerPin)) return true
     if (hasTextMotionSpec(item)) return true
@@ -233,6 +235,7 @@ export function shouldForceContinuousPreviewOverlayFromIndex(
     }
     const effectiveEffects = previewEffectsByItemId?.get(item.id) ?? item.effects
     if (hasEnabledGpuEffect(effectiveEffects)) return true
+    if (item.projection360?.enabled) return true
     if (hasRenderableBlendMode(item)) return true
     if (hasCornerPin(item.cornerPin)) return true
     if (
@@ -364,6 +367,7 @@ export function shouldForceContinuousPreviewOverlayInWindow(
     }
     const effectiveEffects = previewEffectsByItemId?.get(item.id) ?? item.effects
     if (hasEnabledGpuEffect(effectiveEffects)) return true
+    if (item.projection360?.enabled) return true
     if (hasRenderableBlendMode(item)) return true
     if (hasCornerPin(item.cornerPin)) return true
     // Keep the continuous GPU overlay on while a text clip's motion window is

@@ -783,8 +783,21 @@ function VideoSource({
         } catch {
           // Ignore seek errors while media is loading
         }
+        audio.play().catch(() => {})
+      } else {
+        const onCanPlay = () => {
+          audio.removeEventListener('canplay', onCanPlay)
+          if (playingRef.current) {
+            try {
+              audio.currentTime = latestTargetTimeRef.current
+            } catch {
+              // Ignore seek errors while media is loading
+            }
+            audio.play().catch(() => {})
+          }
+        }
+        audio.addEventListener('canplay', onCanPlay, { once: true })
       }
-      audio.play().catch(() => {})
     } else {
       audio.pause()
     }
@@ -895,8 +908,19 @@ function AudioSource({ mediaId, src }: { mediaId?: string; src: string }) {
         } catch {
           // Ignore seek errors while media is loading
         }
+        audio.play().catch(() => {})
+      } else {
+        const onCanPlay = () => {
+          audio.removeEventListener('canplay', onCanPlay)
+          try {
+            audio.currentTime = lastFrameRef.current / fps
+          } catch {
+            // Ignore seek errors while media is loading
+          }
+          audio.play().catch(() => {})
+        }
+        audio.addEventListener('canplay', onCanPlay, { once: true })
       }
-      audio.play().catch(() => {})
     } else {
       audio.pause()
     }

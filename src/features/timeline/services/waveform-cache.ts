@@ -15,7 +15,9 @@ import { createManagedWorker } from '@/shared/utils/managed-worker'
 import {
   getObjectUrlBlob,
   getObjectUrlDirectFileMetadata,
+  registerObjectUrl,
 } from '@/infrastructure/browser/object-url-registry'
+import { importMediaLibraryService } from '../deps/media-library-service'
 import {
   waveformOPFSStorage,
   WAVEFORM_LEVELS,
@@ -113,6 +115,7 @@ interface QueuedGeneration {
   blobUrl: string
   requestId: string
   onProgress?: (progress: number) => void
+  duration?: number
   resolve: (waveform: CachedWaveform) => void
   reject: (error: Error) => void
 }
@@ -128,6 +131,7 @@ interface WaveformGenerationOptions {
   endTimeSec?: number
   updateMemoryCache?: boolean
   isComplete?: boolean
+  duration?: number
 }
 
 class WaveformCacheService {
@@ -164,6 +168,7 @@ class WaveformCacheService {
     mediaId: string,
     blobUrl: string,
     onProgress?: (progress: number) => void,
+    duration?: number,
   ): Promise<CachedWaveform> {
     const requestId = `waveform-${++this.workerRequestId}`
 
@@ -186,6 +191,7 @@ class WaveformCacheService {
       blobUrl,
       requestId,
       onProgress,
+      duration,
       resolve: resolvePromise,
       reject: rejectPromise,
     })
@@ -221,6 +227,7 @@ class WaveformCacheService {
         queued.blobUrl,
         queued.requestId,
         queued.onProgress,
+        { duration: queued.duration },
       )
       queued.resolve(waveform)
     } catch (error) {
@@ -693,7 +700,7 @@ class WaveformCacheService {
     const samplesPerSecond = options.samplesPerSecond ?? SAMPLES_PER_SECOND
     const persistBins = options.persistBins ?? samplesPerSecond === SAMPLES_PER_SECOND
     const persistOPFS = options.persistOPFS ?? true
-    const timeoutMs = options.timeoutMs ?? 90_000
+    const _timeoutMs = options.timeoutMs ?? 90_000
     const updateMemoryCache = options.updateMemoryCache ?? true
     const isCompleteResult = options.isComplete ?? true
 
@@ -711,8 +718,30 @@ class WaveformCacheService {
       let lastWaveformNotifyAt = 0
       let lastNotifiedLoadedSamples = 0
 
+      let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+
+      const scheduleInactivityTimeout = (delayMs = 25_000) => {
+        if (timeoutHandle !== null) {
+          clearTimeout(timeoutHandle)
+        }
+        timeoutHandle = setTimeout(() => {
+          try {
+            worker.postMessage({ type: 'abort', requestId })
+          } catch {
+            // Ignore timeout abort post errors
+          }
+          if (this.workerManager.peekWorker() === worker) {
+            this.workerManager.terminate()
+          }
+          rejectOnce(new Error('Worker timeout'))
+        }, delayMs)
+      }
+
       const cleanup = () => {
-        clearTimeout(timeout)
+        if (timeoutHandle !== null) {
+          clearTimeout(timeoutHandle)
+          timeoutHandle = null
+        }
         worker.removeEventListener('message', handleMessage)
         worker.removeEventListener('error', handleError)
         this.workerRejectors.delete(requestId)
@@ -782,21 +811,9 @@ class WaveformCacheService {
         }
       }
 
-      // Add timeout - long clips (e.g. 10+ minutes) need more processing time.
-      const timeout = setTimeout(() => {
-        try {
-          worker.postMessage({ type: 'abort', requestId })
-        } catch {
-          // Ignore timeout abort post errors
-        }
-        if (this.workerManager.peekWorker() === worker) {
-          this.workerManager.terminate()
-        }
-        rejectOnce(new Error('Worker timeout'))
-      }, timeoutMs)
-
       const handleMessage = async (event: MessageEvent<WaveformWorkerResponse>) => {
         if (event.data.requestId !== requestId) return
+        scheduleInactivityTimeout(25_000)
         try {
           switch (event.data.type) {
             case 'progress':
@@ -920,18 +937,70 @@ class WaveformCacheService {
         worker.addEventListener('message', handleMessage)
         worker.addEventListener('error', handleError)
 
+        let blobToSend = getObjectUrlDirectFileMetadata(blobUrl)
+          ? undefined
+          : (getObjectUrlBlob(blobUrl) ?? undefined)
+
+        let knownDuration = options.duration
+
+        if (!blobToSend && !getObjectUrlDirectFileMetadata(blobUrl)) {
+          if (mediaId) {
+            try {
+              const { mediaLibraryService } = await importMediaLibraryService()
+              const media = await mediaLibraryService.getMedia(mediaId)
+              if (media) {
+                if ((!knownDuration || knownDuration <= 0) && media.duration > 0) {
+                  knownDuration = media.duration
+                }
+                const fileBlob = await mediaLibraryService.getMediaFile(media)
+                if (fileBlob) {
+                  registerObjectUrl(blobUrl, fileBlob, {
+                    mediaId,
+                    storageType: media.storageType,
+                    fileHandle: media.storageType === 'handle' ? media.fileHandle : undefined,
+                    opfsPath: media.storageType === 'opfs' ? media.opfsPath : undefined,
+                    fileSize: media.fileSize,
+                  })
+                  blobToSend = fileBlob
+                }
+              }
+            } catch {
+              // Ignore media library lookup failure
+            }
+          }
+
+          if (!blobToSend && blobUrl.startsWith('blob:')) {
+            try {
+              const resp = await fetch(blobUrl)
+              if (resp.ok) {
+                const fetchedBlob = await resp.blob()
+                registerObjectUrl(blobUrl, fetchedBlob)
+                blobToSend = fetchedBlob
+              }
+            } catch {
+              // Ignore fetch failure
+            }
+          }
+        }
+
+        if (settled) return
+
+        const sourceMetadata = getObjectUrlDirectFileMetadata(blobUrl) ?? undefined
+
+        // Arm the inactivity timer right before dispatching the task to the worker
+        scheduleInactivityTimeout(20_000)
+
         worker.postMessage({
           type: 'generate',
           requestId,
           blobUrl,
-          blob: getObjectUrlDirectFileMetadata(blobUrl)
-            ? undefined
-            : (getObjectUrlBlob(blobUrl) ?? undefined),
-          sourceMetadata: getObjectUrlDirectFileMetadata(blobUrl) ?? undefined,
+          blob: sourceMetadata ? undefined : blobToSend,
+          sourceMetadata,
           samplesPerSecond,
           binDurationSec: WAVEFORM_BIN_DURATION_SEC,
           startTimeSec: options.startTimeSec,
           endTimeSec: options.endTimeSec,
+          knownDuration,
         })
       }
       void startWorker().catch((startError) => {
@@ -1163,9 +1232,10 @@ class WaveformCacheService {
     blobUrl: string,
     requestId: string,
     onProgress?: (progress: number) => void,
+    options: WaveformGenerationOptions = {},
   ): Promise<CachedWaveform> {
     try {
-      return await this.generateWaveformWithWorker(mediaId, blobUrl, requestId, onProgress)
+      return await this.generateWaveformWithWorker(mediaId, blobUrl, requestId, onProgress, options)
     } catch (err) {
       if (err instanceof AbortError) {
         throw err
@@ -1204,6 +1274,7 @@ class WaveformCacheService {
     mediaId: string,
     blobUrl: string,
     onProgress?: (progress: number) => void,
+    options?: { duration?: number },
   ): Promise<CachedWaveform> {
     // Prefer complete cached waveforms, but keep in-flight generations attached
     // to their running promise so callers do not accidentally "complete" on a
@@ -1235,7 +1306,7 @@ class WaveformCacheService {
       return pendingAfterStorage.promise
     }
 
-    return this.enqueueGeneration(mediaId, blobUrl, onProgress)
+    return this.enqueueGeneration(mediaId, blobUrl, onProgress, options?.duration)
   }
 
   async prepareOverviewWaveform(

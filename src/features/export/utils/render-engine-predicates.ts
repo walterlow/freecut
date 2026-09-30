@@ -49,6 +49,7 @@ export function itemHasEnabledGpuEffect(
   item: TimelineItem,
   getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined,
 ): boolean {
+  if (item.projection360?.enabled) return true
   const previewEffects = getPreviewEffectsOverride?.(item.id)
   return hasEnabledGpuEffect(previewEffects ?? item.effects)
 }

@@ -23,6 +23,8 @@ import { liquidDistort } from './transitions/liquid-distort'
 import { lensWarpZoom } from './transitions/lens-warp-zoom'
 import { lightLeakBurn } from './transitions/light-leak-burn'
 import { filmGateSlip } from './transitions/film-gate-slip'
+import { anamorphicStreak } from './transitions/anamorphic-streak'
+import { whipPan } from './transitions/whip-pan'
 
 export const GPU_TRANSITION_REGISTRY = new Map<string, GpuTransitionDefinition>()
 
@@ -51,6 +53,8 @@ register(liquidDistort)
 register(lensWarpZoom)
 register(lightLeakBurn)
 register(filmGateSlip)
+register(anamorphicStreak)
+register(whipPan)
 
 export function getGpuTransition(id: string): GpuTransitionDefinition | undefined {
   return GPU_TRANSITION_REGISTRY.get(id)

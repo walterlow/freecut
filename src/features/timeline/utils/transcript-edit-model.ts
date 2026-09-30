@@ -25,6 +25,10 @@ export interface TranscriptToken {
   sourceStart: number
   /** Word end in source-native seconds. */
   sourceEnd: number
+  /** Segment index within MediaTranscript segments. */
+  segmentIndex?: number
+  /** Word index within segment.words. */
+  wordIndex?: number
   /** Inclusive timeline frame where the word begins. */
   startFrame: number
   /** Exclusive timeline frame where the word ends. */
@@ -44,11 +48,25 @@ export function isTranscriptableItem(item: TimelineItem | undefined): item is Tr
   )
 }
 
-function collectWords(transcript: MediaTranscript): MediaTranscriptWord[] {
-  return transcript.segments
-    .flatMap((segment) => segment.words ?? [])
-    .filter((word) => word.end > word.start && word.text.trim().length > 0)
-    .toSorted((left, right) => left.start - right.start)
+interface IndexedWord extends MediaTranscriptWord {
+  segmentIndex: number
+  wordIndex: number
+}
+
+function collectWords(transcript: MediaTranscript): IndexedWord[] {
+  const result: IndexedWord[] = []
+  transcript.segments.forEach((segment, segmentIndex) => {
+    segment.words?.forEach((word, wordIndex) => {
+      if (word.end > word.start && word.text.trim().length > 0) {
+        result.push({
+          ...word,
+          segmentIndex,
+          wordIndex,
+        })
+      }
+    })
+  })
+  return result.toSorted((left, right) => left.start - right.start)
 }
 
 /**
@@ -100,6 +118,8 @@ export function buildTranscriptTokens(
         text: word.text.trim(),
         sourceStart: clampedStart,
         sourceEnd: clampedEnd,
+        segmentIndex: word.segmentIndex,
+        wordIndex: word.wordIndex,
         startFrame: sourceSecondsToTimelineFrame(item, clampedStart, timelineFps),
         endFrame: sourceSecondsToTimelineFrame(item, clampedEnd, timelineFps),
       })

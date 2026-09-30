@@ -111,6 +111,10 @@ export interface MediaMetadata {
   gopInterval?: number
   thumbnailId?: string
   tags: string[]
+  /** Whether this media is a 360° equirectangular video or photo */
+  is360?: boolean
+  /** Video/media projection format: 'spherical_360' (true 360), 'ultrawide' (flat wide/action cam), or 'standard' */
+  projectionType?: 'spherical_360' | 'ultrawide' | 'standard'
   /**
    * Provenance for media pulled from a third-party provider (e.g. the
    * in-app LottieFiles browser). Persisted so the editor can surface the
@@ -176,6 +180,7 @@ export type MediaTranscriptModel =
   | 'whisper-base'
   | 'whisper-small'
   | 'whisper-large'
+  | (string & {})
 
 export type MediaTranscriptQuantization = 'hybrid' | 'fp32' | 'fp16' | 'q8' | 'q4'
 

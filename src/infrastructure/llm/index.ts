@@ -10,3 +10,7 @@ export {
   getLlmAdapter,
   listLlmAdapters,
 } from './llm-registry'
+export { fetchOllamaModels } from './providers/ollama-adapter'
+export { fetchGeminiModels } from './providers/gemini-adapter'
+export { fetchOpenAiCompatibleModels } from './providers/openai-compatible-adapter'
+

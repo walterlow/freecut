@@ -9,6 +9,7 @@ import { MaskEditorContainer } from './mask-editor-container'
 import { CornerPinContainer } from './corner-pin-container'
 import { PowerWindowOverlayContainer } from './power-window-overlay'
 import { SpatialEffectPointOverlayContainer } from './spatial-effect-point-overlay'
+import { Projection360OrbitContainer } from './projection-360-orbit-container'
 import { PreviewPerfPanel } from './preview-perf-panel'
 import { PreviewStage } from './preview-stage'
 import { RollingEditOverlay } from './rolling-edit-overlay'
@@ -575,6 +576,15 @@ const VideoPreviewBase = memo(function VideoPreviewBase({
   useEffect(() => {
     const wasForced = previousForceFastScrubOverlayRef.current
     previousForceFastScrubOverlayRef.current = forceFastScrubOverlay
+    if (!wasForced && forceFastScrubOverlay) {
+      const playback = usePlaybackStore.getState()
+      const currentFrame = playback.previewFrame ?? playback.currentFrame
+      usePreviewBridgeStore.getState().requestPostEditWarm(
+        currentFrame,
+        items.map((i) => i.id),
+      )
+      return
+    }
     if (!wasForced || forceFastScrubOverlay) return
 
     const playbackState = usePlaybackStore.getState()
@@ -593,6 +603,7 @@ const VideoPreviewBase = memo(function VideoPreviewBase({
     forceFastScrubOverlay,
     hideFastScrubOverlay,
     isPausedTransitionOverlayActive,
+    items,
     setDisplayedFrame,
   ])
   const shouldPreferPlayerForPreview = useCallback(
@@ -849,6 +860,7 @@ const VideoPreviewBase = memo(function VideoPreviewBase({
           zoom={zoom}
         />
       )}
+      <Projection360OrbitContainer containerRect={playerContainerRect} />
     </>
   ) : null
   const shouldShowAfterDuringSplitPlayback = isPlayingForSplitComparison
@@ -951,7 +963,7 @@ const VideoPreviewBase = memo(function VideoPreviewBase({
         effectivePlayerDisplayedFrame === comparisonTargetFrame)
   const stageRenderedOverlayVisible = isColorGradeComparisonActive
     ? isRenderedOverlayVisible && isColorGradeComparisonFrameReady
-    : isRenderedOverlayVisible
+    : isRenderedOverlayVisible || forceFastScrubOverlay
   const isSplitAfterVisible = isSplitGradeComparison && stageRenderedOverlayVisible
 
   return (

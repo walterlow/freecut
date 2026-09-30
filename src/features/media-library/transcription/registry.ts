@@ -22,6 +22,17 @@ export function getDefaultMediaTranscriptionModel(): MediaTranscriptModel {
   return getDefaultMediaTranscriptionAdapter().defaultModel
 }
 
+import { formatMediaTranscriptionModelLabel } from './external/resolve-transcriber'
+
 export function getMediaTranscriptionModelLabel(model: MediaTranscriptModel): string {
+  const modelStr = model as string
+  if (
+    modelStr.startsWith('ollama:') ||
+    modelStr.startsWith('groq:') ||
+    modelStr.startsWith('openai:') ||
+    modelStr.startsWith('gemini:')
+  ) {
+    return formatMediaTranscriptionModelLabel(model)
+  }
   return getDefaultMediaTranscriptionAdapter().getModelLabel(model)
 }

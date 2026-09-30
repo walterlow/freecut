@@ -21,11 +21,23 @@ const getMediaFileMock = vi.fn()
 const startPreviewAudioConformMock = vi.fn()
 const resolvePreviewAudioConformUrlMock = vi.fn()
 
+const deleteTranscriptMock = vi.fn()
+const useMediaLibraryStoreStateMock = {
+  setTranscriptStatus: vi.fn(),
+  clearTranscriptProgress: vi.fn(),
+}
+
 vi.mock('@/infrastructure/storage', () => ({
-  deleteTranscript: vi.fn(),
+  deleteTranscript: deleteTranscriptMock,
   getTranscript: getTranscriptMock,
   getTranscriptMediaIds: vi.fn(),
   saveTranscript: saveTranscriptMock,
+}))
+
+vi.mock('../stores/media-library-store', () => ({
+  useMediaLibraryStore: {
+    getState: () => useMediaLibraryStoreStateMock,
+  },
 }))
 
 vi.mock('@/shared/state/selection', () => ({
@@ -835,12 +847,12 @@ describe('mediaTranscriptionService.transcribeMedia', () => {
             sourceTranscriptUpdatedAt: transcript.updatedAt,
             timingVersion: 4,
             cues: [
-              {
+              expect.objectContaining({
                 id: 'transcript-media-1-0',
                 startSeconds: 0.2,
                 endSeconds: 1.4,
                 text: 'Fresh nested phrase',
-              },
+              }),
             ],
           }),
         }),
@@ -1178,4 +1190,289 @@ describe('mediaTranscriptionService.transcribeMedia', () => {
     expect(secondTranscript.mediaId).toBe('media-2')
     expect(transcribeMock).toHaveBeenCalledTimes(2)
   })
+
+  describe('deleteTranscript and clearExistingTranscriptCaptions', () => {
+    it('deletes stored transcript, clears timeline clip transcriptCaptions, removes generated subtitle segments and resets store status', async () => {
+      const updateItem = vi.fn()
+      const clip: VideoItem = {
+        id: 'clip-1',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 150,
+        label: 'Clip',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        sourceStart: 0,
+        sourceEnd: 150,
+        sourceDuration: 150,
+        sourceFps: 30,
+        speed: 1,
+        transcriptCaptions: {
+          type: 'transcript',
+          mediaId: 'media-1',
+          enabled: true,
+          updatedAt: 100,
+          sourceTranscriptUpdatedAt: 100,
+          timingVersion: 4,
+          cues: [{ id: 'c1', startSeconds: 0, endSeconds: 2, text: 'Hello' }],
+        },
+      }
+      const subtitleSegment = {
+        id: 'sub-1',
+        type: 'subtitle',
+        trackId: 'track-subs',
+        from: 0,
+        durationInFrames: 60,
+        label: 'Sub',
+        source: {
+          type: 'transcript',
+          mediaId: 'media-1',
+          clipId: 'clip-1',
+        },
+        cues: [],
+      } as unknown as TimelineItem
+
+      useTimelineStoreGetStateMock.mockReturnValue({
+        fps: 30,
+        tracks: [makeTrack('track-video', 0), makeTrack('track-subs', 1)],
+        items: [clip, subtitleSegment],
+        updateItem,
+      })
+
+      const listener = vi.fn()
+      const unsubscribe = mediaTranscriptionService.onTranscriptChanged(listener)
+
+      await mediaTranscriptionService.deleteTranscript('media-1')
+
+      expect(deleteTranscriptMock).toHaveBeenCalledWith('media-1')
+      expect(updateItem).toHaveBeenCalledWith('clip-1', { transcriptCaptions: undefined })
+      expect(removeTimelineItemsExactMock).toHaveBeenCalledWith(['sub-1'])
+      expect(useMediaLibraryStoreStateMock.setTranscriptStatus).toHaveBeenCalledWith('media-1', 'idle')
+      expect(useMediaLibraryStoreStateMock.clearTranscriptProgress).toHaveBeenCalledWith('media-1')
+      expect(listener).toHaveBeenCalledWith('media-1')
+
+      unsubscribe()
+    })
+
+    it('purges transcriptCaptions and generated captions from compositions and navigation stashes', async () => {
+      const updateComposition = vi.fn()
+      const compositionClip: VideoItem = {
+        id: 'comp-clip-1',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 150,
+        label: 'Comp Clip',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        sourceStart: 0,
+        sourceEnd: 150,
+        sourceDuration: 150,
+        sourceFps: 30,
+        speed: 1,
+        transcriptCaptions: {
+          type: 'transcript',
+          mediaId: 'media-1',
+          enabled: true,
+          updatedAt: 100,
+          sourceTranscriptUpdatedAt: 100,
+          timingVersion: 4,
+          cues: [],
+        },
+      }
+      const compositionSubtitle = {
+        id: 'comp-sub-1',
+        type: 'subtitle',
+        trackId: 'track-subs',
+        from: 0,
+        durationInFrames: 60,
+        label: 'Comp Sub',
+        source: {
+          type: 'transcript',
+          mediaId: 'media-1',
+          clipId: 'comp-clip-1',
+        },
+        cues: [],
+      } as unknown as TimelineItem
+
+      useCompositionsStoreGetStateMock.mockReturnValue({
+        compositions: [
+          {
+            id: 'composition-1',
+            name: 'Compound',
+            items: [compositionClip, compositionSubtitle],
+            tracks: [makeTrack('track-video', 0)],
+          },
+        ],
+        updateComposition,
+      })
+
+      useCompositionNavigationStoreGetStateMock.mockReturnValue({
+        stashStack: [
+          {
+            compositionId: 'composition-parent',
+            items: [compositionClip, compositionSubtitle],
+            tracks: [],
+          },
+        ],
+        mainHolder: null,
+      })
+
+      useTimelineStoreGetStateMock.mockReturnValue({
+        fps: 30,
+        tracks: [],
+        items: [],
+        updateItem: vi.fn(),
+      })
+
+      await mediaTranscriptionService.deleteTranscript('media-1')
+
+      expect(updateComposition).toHaveBeenCalledWith('composition-1', {
+        items: [
+          expect.not.objectContaining({
+            transcriptCaptions: expect.anything(),
+          }),
+        ],
+      })
+
+      expect(useCompositionNavigationStoreSetStateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stashStack: [
+            expect.objectContaining({
+              items: [
+                expect.not.objectContaining({
+                  transcriptCaptions: expect.anything(),
+                }),
+              ],
+            }),
+          ],
+        }),
+      )
+    })
+
+    it('updates an existing transcript and notifies listeners', async () => {
+      const listener = vi.fn()
+      const unsubscribe = mediaTranscriptionService.onTranscriptChanged(listener)
+
+      const updatedTranscript: MediaTranscript = {
+        id: 'media-1',
+        mediaId: 'media-1',
+        model: 'whisper-base',
+        quantization: 'q8',
+        text: 'Hello edited world',
+        segments: [
+          {
+            text: 'Hello edited world',
+            start: 0,
+            end: 2,
+            words: [
+              { text: 'Hello', start: 0, end: 0.5 },
+              { text: 'edited', start: 0.5, end: 1.0 },
+              { text: 'world', start: 1.0, end: 2.0 },
+            ],
+          },
+        ],
+        createdAt: 1000,
+        updatedAt: 1000,
+      }
+
+      await mediaTranscriptionService.updateTranscript(updatedTranscript)
+
+      expect(listener).toHaveBeenCalledWith('media-1')
+      expect(saveTranscriptMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'media-1',
+          text: 'Hello edited world',
+        }),
+      )
+
+      unsubscribe()
+    })
+
+    it('synchronizes SubtitleSegmentItem cues when updateTranscript is called', async () => {
+      const updateItem = vi.fn()
+      const clip: VideoItem = {
+        id: 'clip-1',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 150,
+        label: 'Clip',
+        mediaId: 'media-1',
+        src: 'blob:test',
+        sourceStart: 0,
+        sourceEnd: 150,
+        sourceDuration: 150,
+        sourceFps: 30,
+        speed: 1,
+      }
+      const subtitleSegment = {
+        id: 'sub-1',
+        type: 'subtitle',
+        trackId: 'track-subs',
+        from: 0,
+        durationInFrames: 150,
+        label: 'Transcript',
+        source: {
+          type: 'transcript',
+          mediaId: 'media-1',
+          clipId: 'clip-1',
+        },
+        cues: [
+          {
+            id: 'c1',
+            startSeconds: 0,
+            endSeconds: 2,
+            text: 'Old phrase',
+            words: [{ word: 'Old', start: 0, end: 1 }, { word: 'phrase', start: 1, end: 2 }],
+          },
+        ],
+      } as unknown as TimelineItem
+
+      useTimelineStoreGetStateMock.mockReturnValue({
+        fps: 30,
+        tracks: [makeTrack('track-video', 0), makeTrack('track-subs', 1)],
+        items: [clip, subtitleSegment],
+        updateItem,
+      })
+
+      const updatedTranscript: MediaTranscript = {
+        id: 'media-1',
+        mediaId: 'media-1',
+        model: 'whisper-base',
+        quantization: 'q8',
+        text: 'New corrected phrase',
+        segments: [
+          {
+            text: 'New corrected phrase',
+            start: 0,
+            end: 2,
+            words: [
+              { text: 'New', start: 0, end: 0.6 },
+              { text: 'corrected', start: 0.6, end: 1.2 },
+              { text: 'phrase', start: 1.2, end: 2.0 },
+            ],
+          },
+        ],
+        createdAt: 1000,
+        updatedAt: 1000,
+      }
+
+      await mediaTranscriptionService.updateTranscript(updatedTranscript)
+
+      expect(updateItem).toHaveBeenCalledWith(
+        'sub-1',
+        expect.objectContaining({
+          cues: expect.arrayContaining([
+            expect.objectContaining({
+              text: 'New corrected phrase',
+            }),
+          ]),
+        }),
+      )
+    })
+  })
 })
+
+

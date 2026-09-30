@@ -1136,6 +1136,8 @@ class MediaLibraryService {
       gopInterval: metadata.type === 'video' ? metadata.gopInterval : undefined,
       thumbnailId,
       tags: [],
+      projectionType: metadata.type === 'video' ? metadata.projectionType : undefined,
+      is360: metadata.type === 'video' ? metadata.projectionType === 'spherical_360' : undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     }

@@ -12,6 +12,8 @@ import {
   Loader2,
   FileText,
   Link,
+  RefreshCw,
+  Trash2,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -35,6 +37,10 @@ interface MediaInfoPopoverProps {
   triggerClassName?: string
   /** Called when user clicks a caption timestamp to open source monitor at that time */
   onSeekToCaption?: (timeSec: number) => void
+  /** Called to open transcribe dialog to generate or regenerate transcript */
+  onTranscribe?: () => void
+  /** Called to delete/clean the existing transcript */
+  onDeleteTranscript?: () => void | Promise<void>
 }
 
 type SourceStatus =
@@ -67,6 +73,8 @@ export function MediaInfoPopover({
   media,
   triggerClassName,
   onSeekToCaption,
+  onTranscribe,
+  onDeleteTranscript,
 }: MediaInfoPopoverProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -235,17 +243,49 @@ export function MediaInfoPopover({
 
         {(transcriptLoading || transcript) && (
           <div className="border-t border-border/50">
-            <div className="flex items-center gap-1.5 px-3 py-1.5">
-              <FileText className="w-3 h-3 text-primary" />
-              <span className="text-[10px] font-medium text-muted-foreground">
-                {transcript
-                  ? t('media.info.transcriptWithCount', { count: transcript.segments.length })
-                  : t('media.info.transcript')}
-              </span>
-              {transcript && (
-                <span className="ml-auto text-[10px] text-muted-foreground">
-                  {getMediaTranscriptionModelLabel(transcript.model)}
+            <div className="flex items-center justify-between gap-1.5 px-3 py-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <FileText className="w-3 h-3 text-primary shrink-0" />
+                <span className="text-[10px] font-medium text-muted-foreground truncate">
+                  {transcript
+                    ? t('media.info.transcriptWithCount', { count: transcript.segments.length })
+                    : t('media.info.transcript')}
                 </span>
+              </div>
+              {transcript && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-[9px] text-muted-foreground hidden sm:inline">
+                    {getMediaTranscriptionModelLabel(transcript.model)}
+                  </span>
+                  {onTranscribe && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setOpen(false)
+                        onTranscribe()
+                      }}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                      title="Volver a transcribir"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                    </button>
+                  )}
+                  {onDeleteTranscript && (
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        await onDeleteTranscript()
+                        setTranscript(null)
+                      }}
+                      className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                      title="Limpiar transcripción"
+                    >
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
             {transcriptLoading ? (

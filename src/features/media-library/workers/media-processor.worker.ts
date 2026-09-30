@@ -12,6 +12,10 @@
 import { ensureProResDecoderRegistered } from '@/infrastructure/browser/register-prores-decoder'
 import { createLogger, createOperationId } from '@/shared/logging/logger'
 import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
+import {
+  detectVideoProjectionFormat,
+  type VideoProjectionType,
+} from '../utils/projection-detection'
 
 const logger = createLogger('MediaProcessorWorker')
 const KEYFRAME_EXTRACTION_TIMEOUT_MS = 8_000
@@ -133,6 +137,8 @@ export interface VideoMetadata {
   keyframeTimestamps?: number[]
   /** Average keyframe interval in seconds (GOP length) */
   gopInterval?: number
+  /** Video projection format: 'spherical_360', 'ultrawide', or 'standard' */
+  projectionType?: VideoProjectionType
 }
 
 export interface AudioMetadata {
@@ -465,6 +471,12 @@ async function extractVideoMetadata(
       gopInterval = totalSpan / (keyframeTimestamps.length - 1)
     }
 
+    const projectionType = await detectVideoProjectionFormat(
+      file,
+      videoTrack.displayWidth || DEFAULT_PROJECT_WIDTH,
+      videoTrack.displayHeight || DEFAULT_PROJECT_HEIGHT,
+    )
+
     return {
       type: 'video',
       duration: duration || 0,
@@ -478,6 +490,7 @@ async function extractVideoMetadata(
       videoCodecSupported,
       keyframeTimestamps,
       gopInterval,
+      projectionType,
     }
   } finally {
     input.dispose()

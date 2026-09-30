@@ -23,6 +23,7 @@
   },
   "section": {
     "addEffect": "Agregar efecto",
+    "clearAll": "Limpiar todos los efectos",
     "disableAll": "Desactivar todos",
     "emptyState": "Sin efectos",
     "enableAll": "Activar todos",

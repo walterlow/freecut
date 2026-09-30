@@ -14,3 +14,5 @@ export { LocalInferenceUnloadControl } from '@/features/settings/components/loca
 export { LocalModelCacheControl } from '@/features/settings/components/local-model-cache-control'
 export { useResolvedHotkeys } from '@/features/settings/hooks/use-resolved-hotkeys'
 export { HotkeyEditor } from '@/features/settings/components/hotkey-editor'
+export { AiProviderSettings } from '@/features/settings/components/ai-provider-settings'
+export { ComfyUiWorkflowSettings } from '@/features/settings/components/comfyui-workflow-settings'

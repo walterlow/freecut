@@ -43,7 +43,12 @@ import {
   useCompositionNavigationStore,
 } from './composition-navigation-store'
 import { useSequencesStore } from './sequences-store'
-import { getProject, updateProject, saveProjectThumbnail } from '@/infrastructure/storage'
+import {
+  getProject,
+  getTranscriptMediaIds,
+  saveProjectThumbnail,
+  updateProject,
+} from '@/infrastructure/storage'
 import {
   importCanvasRenderOrchestrator,
   convertTimelineToComposition,
@@ -203,6 +208,97 @@ function sanitizeTimelineEphemeralFields(timeline: ProjectTimeline): {
       return composition
     }
 
+    return {
+      ...composition,
+      items: nextItems,
+    }
+  }) as ProjectTimeline['compositions']
+
+  if (!cleaned) {
+    return { timeline, cleaned: false }
+  }
+
+  return {
+    timeline: {
+      ...timeline,
+      items,
+      ...(compositions && { compositions }),
+    },
+    cleaned: true,
+  }
+}
+
+async function sanitizeTimelineOrphanedTranscriptCaptions(timeline: ProjectTimeline): Promise<{
+  timeline: ProjectTimeline
+  cleaned: boolean
+}> {
+  const mediaIds = new Set<string>()
+
+  for (const item of timeline.items ?? []) {
+    if (
+      (item as { transcriptCaptions?: { type?: string } }).transcriptCaptions?.type ===
+        'transcript' &&
+      'mediaId' in item &&
+      item.mediaId
+    ) {
+      mediaIds.add(item.mediaId)
+    }
+  }
+
+  for (const comp of timeline.compositions ?? []) {
+    for (const item of comp.items ?? []) {
+      if (
+        (item as { transcriptCaptions?: { type?: string } }).transcriptCaptions?.type ===
+          'transcript' &&
+        'mediaId' in item &&
+        item.mediaId
+      ) {
+        mediaIds.add(item.mediaId)
+      }
+    }
+  }
+
+  if (mediaIds.size === 0) {
+    return { timeline, cleaned: false }
+  }
+
+  let readyTranscripts: Set<string>
+  try {
+    readyTranscripts = await getTranscriptMediaIds([...mediaIds])
+  } catch (error) {
+    logger.warn('Failed to query transcript media IDs during timeline sanitization', error)
+    return { timeline, cleaned: false }
+  }
+
+  let cleaned = false
+
+  const stripItemCaptionsIfOrphaned = <T extends { mediaId?: string; transcriptCaptions?: unknown }>(
+    item: T,
+  ): T => {
+    if (
+      item.mediaId &&
+      (item.transcriptCaptions as { type?: string } | undefined)?.type === 'transcript' &&
+      !readyTranscripts.has(item.mediaId)
+    ) {
+      cleaned = true
+      const next = { ...item }
+      delete next.transcriptCaptions
+      return next
+    }
+    return item
+  }
+
+  const items = (timeline.items ?? []).map(stripItemCaptionsIfOrphaned) as ProjectTimeline['items']
+
+  const compositions = timeline.compositions?.map((composition) => {
+    let compCleaned = false
+    const nextItems = (composition.items ?? []).map((item) => {
+      const stripped = stripItemCaptionsIfOrphaned(item)
+      if (stripped !== item) compCleaned = true
+      return stripped
+    }) as ProjectTimeline['items']
+
+    if (!compCleaned) return composition
     return {
       ...composition,
       items: nextItems,
@@ -1096,7 +1192,8 @@ export async function hydrateTimelineStoresFromProject(project: Project): Promis
   loadTrackHeightOverrides(project.id)
 
   if (project.timeline && project.timeline.tracks?.length > 0) {
-    const t = project.timeline
+    const sanitizedCaptions = await sanitizeTimelineOrphanedTranscriptCaptions(project.timeline)
+    const t = sanitizedCaptions.cleaned ? sanitizedCaptions.timeline : project.timeline
 
     logger.debug('hydrateTimelineStoresFromProject: loading existing timeline', {
       tracksCount: t.tracks?.length ?? 0,
@@ -1287,20 +1384,26 @@ async function loadTimelineOnce(
     const sanitizedTimeline = repairedLegacyLayouts.project.timeline
       ? sanitizeTimelineEphemeralFields(repairedLegacyLayouts.project.timeline)
       : { timeline: repairedLegacyLayouts.project.timeline, cleaned: false }
-    const project = sanitizedTimeline.cleaned
+    const sanitizedCaptions = sanitizedTimeline.timeline
+      ? await sanitizeTimelineOrphanedTranscriptCaptions(sanitizedTimeline.timeline)
+      : { timeline: sanitizedTimeline.timeline, cleaned: false }
+    const isCleaned = sanitizedTimeline.cleaned || sanitizedCaptions.cleaned
+    const project = isCleaned
       ? {
           ...repairedLegacyLayouts.project,
-          timeline: sanitizedTimeline.timeline,
+          timeline: sanitizedCaptions.timeline,
         }
       : repairedLegacyLayouts.project
 
     // Log migration activity
-    if (migrationResult.migrated || repairedLegacyLayouts.repaired || sanitizedTimeline.cleaned) {
+    if (migrationResult.migrated || repairedLegacyLayouts.repaired || isCleaned) {
       if (migrationResult.appliedMigrations.length > 0) {
         logger.info(
           `Migrated project from v${migrationResult.fromVersion} to v${migrationResult.toVersion}`,
           { migrations: migrationResult.appliedMigrations },
         )
+      } else if (sanitizedCaptions.cleaned) {
+        logger.info('Removed orphaned transcript captions from stored timeline items', { projectId })
       } else if (sanitizedTimeline.cleaned) {
         logger.info('Removed ephemeral thumbnail URLs from stored timeline items', { projectId })
       } else if (repairedLegacyLayouts.repaired) {

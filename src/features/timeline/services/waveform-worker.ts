@@ -20,6 +20,7 @@ interface WaveformRequest {
   binDurationSec?: number
   startTimeSec?: number
   endTimeSec?: number
+  knownDuration?: number
 }
 
 export interface WaveformProgressResponse {
@@ -94,6 +95,7 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     binDurationSec = 30,
     startTimeSec,
     endTimeSec,
+    knownDuration,
   } = event.data
   const state = { aborted: false }
   activeRequests.set(requestId, state)
@@ -129,6 +131,13 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     const audioCodec = typeof audioTrack.codec === 'string' ? audioTrack.codec : undefined
     if (isAc3AudioCodec(audioCodec)) {
       await ensureAc3DecoderRegistered()
+    } else {
+      const canDecode = await audioTrack.canDecode().catch(() => false)
+      if (!canDecode) {
+        throw new Error(
+          `Audio codec ${audioCodec || 'unknown'} cannot be decoded by WebCodecs; use AudioContext fallback`,
+        )
+      }
     }
 
     self.postMessage({ type: 'progress', requestId, progress: 10 } as WaveformProgressResponse)
@@ -137,7 +146,41 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     const trackSampleRate = audioTrack.sampleRate || 0
     const fallbackSampleRate = trackSampleRate > 0 ? trackSampleRate : 48000
     const channels = audioTrack.numberOfChannels || 1
-    const duration = await audioTrack.computeDuration()
+
+    let duration =
+      typeof knownDuration === 'number' && Number.isFinite(knownDuration) && knownDuration > 0
+        ? knownDuration
+        : 0
+
+    if (duration <= 0) {
+      try {
+        const metaDuration = await audioTrack.getDurationFromMetadata()
+        if (typeof metaDuration === 'number' && Number.isFinite(metaDuration) && metaDuration > 0) {
+          duration = metaDuration
+        }
+      } catch {
+        // Ignore metadata read error
+      }
+    }
+
+    if (duration <= 0) {
+      try {
+        // computeDuration can scan the entire file on large videos; give it max 4s
+        duration = await Promise.race([
+          audioTrack.computeDuration(),
+          new Promise<number>((_, reject) =>
+            setTimeout(() => reject(new Error('computeDuration timeout')), 4000),
+          ),
+        ])
+      } catch {
+        // Ignore computeDuration timeout
+      }
+    }
+
+    if (!duration || duration <= 0) {
+      throw new Error('Unable to determine audio duration for waveform generation')
+    }
+
     const decodeStartTime = Math.max(
       0,
       Math.min(duration, Number.isFinite(startTimeSec) ? (startTimeSec as number) : 0),
@@ -198,6 +241,9 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
         { transfer: [chunk.buffer] },
       )
     }
+
+    let lastPostedProgress = 20
+    let lastProgressPostAt = Date.now()
 
     // Process samples
     for await (const sample of sink.samples(decodeStartTime, decodeEndTime)) {
@@ -285,7 +331,7 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
           nextChunkStart = end
         }
 
-        // Update progress (20-80% range for sample extraction)
+        // Update progress (20-80% range for sample extraction) - throttled to avoid event loop flooding
         const progress =
           20 +
           Math.min(
@@ -294,7 +340,12 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
               ((processedEndTimeSec - decodeStartTime) / Math.max(decodeDuration, 0.001)) * 60,
             ),
           )
-        self.postMessage({ type: 'progress', requestId, progress } as WaveformProgressResponse)
+        const now = Date.now()
+        if (progress - lastPostedProgress >= 2 || now - lastProgressPostAt >= 250) {
+          lastPostedProgress = progress
+          lastProgressPostAt = now
+          self.postMessage({ type: 'progress', requestId, progress } as WaveformProgressResponse)
+        }
       } finally {
         // Always close the sample to prevent resource leaks
         sample.close()

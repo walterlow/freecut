@@ -49,6 +49,7 @@ import { GifSection } from './gif-section'
 import { LottieSection } from './lottie-section'
 import { ShapeSection } from './shape-section'
 import { CornerPinSection } from './corner-pin-section'
+import { Projection360Section } from './projection-360-section'
 import { CompositionControlsSection } from './composition-controls-section'
 
 const LazyAudioSection = lazy(() =>
@@ -666,6 +667,7 @@ const ClipPanelCore = memo(function ClipPanelCore({
                 />
               )}
               {paintableLayoutItems.length > 0 && <CornerPinSection items={paintableLayoutItems} />}
+              {paintableLayoutItems.length > 0 && <Projection360Section items={paintableLayoutItems} />}
               {hasTextItems && (
                 <Suspense fallback={null}>
                   <LazyTextContentSection items={selectedItems} canvas={canvas} />

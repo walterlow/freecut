@@ -41,7 +41,15 @@ const netflixCaption: TextItem = {
   ...netflixPreset.patch,
 }
 
-describe('CaptionStyleControls selected styling', () => {
+vi.mock('./font-picker', () => ({
+  FontPicker: ({ value, onValueChange }: { value?: string; onValueChange: (v: string) => void }) => (
+    <div data-testid="font-picker" data-value={value}>
+      <button onClick={() => onValueChange('Montserrat')}>Pick Montserrat</button>
+    </div>
+  ),
+}))
+
+describe('CaptionStyleControls', () => {
   it('uses neutral selected styling for the active preset and enabled background', () => {
     render(
       <CaptionStyleControls items={[netflixCaption]} canvasWidth={1920} canvasHeight={1080} />,
@@ -54,5 +62,21 @@ describe('CaptionStyleControls selected styling', () => {
       expect(control).toHaveClass('border-border/70', 'bg-secondary/60', 'text-foreground')
       expect(control).not.toHaveClass('border-primary', 'bg-primary/15')
     }
+  })
+
+  it('renders font picker and calls onApplyPatch when font or animation changes', () => {
+    const onApplyPatch = vi.fn()
+    render(
+      <CaptionStyleControls
+        items={[netflixCaption]}
+        canvasWidth={1920}
+        canvasHeight={1080}
+        onApplyPatch={onApplyPatch}
+      />,
+    )
+
+    expect(screen.getByTestId('font-picker')).toBeInTheDocument()
+    screen.getByRole('button', { name: 'Pick Montserrat' }).click()
+    expect(onApplyPatch).toHaveBeenCalledWith({ fontFamily: 'Montserrat' })
   })
 })

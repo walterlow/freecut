@@ -20,6 +20,13 @@ let devVitePreloadRecoveryInFlight = false
 
 // Debug utilities are editor-heavy; keep them out of the production startup graph.
 if (import.meta.env.DEV) {
+  const origWarn = console.warn
+  console.warn = (...args: unknown[]) => {
+    if (typeof args[0] === 'string' && args[0].includes('reduced-motion-disabled')) {
+      return
+    }
+    origWarn.apply(console, args)
+  }
   void import('@/app/debug').then(({ initializeDebugUtils }) => initializeDebugUtils())
 }
 

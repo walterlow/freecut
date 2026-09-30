@@ -67,6 +67,7 @@ export interface TimelineActions {
   addItem: (item: TimelineItem) => void
   addItems: (items: TimelineItem[]) => void
   addItemWithLinkedAudio: (video: VideoItem) => void
+  extractAudioFromVideo: (videoId: string) => string | null
   addItemOnNewTrack: (item: TimelineItem, tracks: TimelineTrack[]) => void
   updateItem: (id: string, updates: Partial<TimelineItem>) => void
   removeItems: (ids: string[]) => void
@@ -167,6 +168,7 @@ export interface TimelineActions {
     updates: Partial<{ effect: VisualEffect; enabled: boolean }>,
   ) => void
   removeEffect: (itemId: string, effectId: string) => void
+  clearEffects: (itemId: string) => void
   toggleEffect: (itemId: string, effectId: string) => void
   setItemEffects: (updates: Array<{ itemId: string; effects: ItemEffect[] }>) => void
   // Transition actions

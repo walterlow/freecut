@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { GlobalTooltip } from '@/components/ui/global-tooltip'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { MotionConfig } from 'motion/react'
 import { ErrorBoundary } from '@/app/error-boundary'
 import { PwaInstallPrompt } from '@/app/pwa-install-prompt'
 import { RouteErrorScreen } from '@/app/route-error'
@@ -76,18 +77,20 @@ export function App() {
   // children components mount — never see an uninitialized workspace root.
   return (
     <ErrorBoundary level="app">
-      <TooltipProvider delayDuration={300}>
-        <WorkspaceGate>
-          <RouterProvider router={router} />
-        </WorkspaceGate>
-        <GlobalTooltip />
-        <PwaInstallPrompt />
-        {showToaster && (
-          <Suspense fallback={null}>
-            <LazyToaster />
-          </Suspense>
-        )}
-      </TooltipProvider>
+      <MotionConfig reducedMotion={import.meta.env.PROD ? 'user' : 'never'}>
+        <TooltipProvider delayDuration={300}>
+          <WorkspaceGate>
+            <RouterProvider router={router} />
+          </WorkspaceGate>
+          <GlobalTooltip />
+          <PwaInstallPrompt />
+          {showToaster && (
+            <Suspense fallback={null}>
+              <LazyToaster />
+            </Suspense>
+          )}
+        </TooltipProvider>
+      </MotionConfig>
     </ErrorBoundary>
   )
 }

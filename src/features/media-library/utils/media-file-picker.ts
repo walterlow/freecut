@@ -2,9 +2,9 @@ export const MEDIA_FILE_PICKER_TYPES = [
   {
     description: 'Media files',
     accept: {
-      'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv'],
+      'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.insv'],
       'audio/*': ['.mp3', '.wav', '.ogg', '.m4a', '.aac'],
-      'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'],
+      'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.insp'],
       'application/lottie+json': ['.json', '.lottie'],
     },
   },
@@ -13,6 +13,8 @@ export const MEDIA_FILE_PICKER_TYPES = [
 const FORMAT_LABEL_OVERRIDES: Record<string, string> = {
   webm: 'WebM',
   webp: 'WebP',
+  insv: 'INSV',
+  insp: 'INSP',
 }
 
 export function getSupportedMediaFormatLabels(): string[] {

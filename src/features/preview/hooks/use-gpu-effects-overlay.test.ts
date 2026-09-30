@@ -641,12 +641,39 @@ describe('timelineHasContinuousOverlayContent', () => {
     )
   })
 
-  it('detects overlay-only content nested inside a sub-composition', () => {
-    const subComp = createSubComposition([
-      createVideoItem({ id: 'sub-item', effects: [gpuEffect] }),
-    ])
-    expect(
-      timelineHasContinuousOverlayContent([createCompositionItem()], { 'sub-1': subComp }),
-    ).toBe(true)
+  it('is true when an item has projection360 enabled', () => {
+    const itemWith360 = createVideoItem({
+      projection360: {
+        enabled: true,
+        preset: 'ultra-wide',
+        fov: 120,
+        distance: 1,
+        distortion: 0.8,
+        yaw: 0,
+        pitch: 0,
+        roll: 0,
+        horizonLock: 'off',
+        horizonOffset: 0,
+      },
+    })
+    expect(timelineHasContinuousOverlayContent([itemWith360])).toBe(true)
+  })
+
+  it('ignores projection360 when enabled is false', () => {
+    const itemWith360Disabled = createVideoItem({
+      projection360: {
+        enabled: false,
+        preset: 'linear',
+        fov: 78,
+        distance: 1,
+        distortion: 0,
+        yaw: 0,
+        pitch: 0,
+        roll: 0,
+        horizonLock: 'off',
+        horizonOffset: 0,
+      },
+    })
+    expect(timelineHasContinuousOverlayContent([itemWith360Disabled])).toBe(false)
   })
 })

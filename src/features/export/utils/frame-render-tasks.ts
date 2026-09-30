@@ -8,6 +8,7 @@ import { getAnimatedTransform } from './canvas-keyframes'
 import { resolveAnimatedColorEffects } from '@/features/export/deps/keyframes'
 import {
   combineEffects,
+  createProjection360ItemEffect,
   getAdjustmentLayerEffects,
   renderEffectsFromMaskedSource,
   type AdjustmentLayerWithTrackOrder,
@@ -128,9 +129,16 @@ export async function renderItemWithEffects(
   }
 
   // Get effects (preview override → item effects + adjustment layer effects)
-  const baseItemEffects =
+  const rawItemEffects =
     (renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined) ??
     effectiveItem.effects
+  const hasExistingProj = rawItemEffects?.some(
+    (e) => e.effect.type === 'gpu-effect' && e.effect.gpuEffectType === 'gpu-projection-360',
+  )
+  const baseItemEffects =
+    effectiveItem.projection360?.enabled && !hasExistingProj
+      ? [createProjection360ItemEffect(effectiveItem.projection360), ...(rawItemEffects ?? [])]
+      : rawItemEffects
   const itemEffects = resolveAnimatedColorEffects(
     baseItemEffects,
     getCurrentKeyframes(effectiveItem.id),

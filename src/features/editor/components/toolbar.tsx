@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import {
@@ -15,7 +15,9 @@ import {
   Settings,
   Sparkles,
   Video,
+  FileCode,
 } from 'lucide-react'
+import { importFcpxmlExportService } from '../deps/project-bundle'
 import { Button } from '@/components/ui/button'
 import { DiscordIcon } from '@/components/brand/discord-icon'
 import { DISCORD_INVITE_URL } from '@/config/community'
@@ -164,6 +166,38 @@ export const Toolbar = memo(function Toolbar({
       finishSaveAnimation()
     }
   }
+
+  const handleExportFcpxml = useCallback(async () => {
+    try {
+      const { exportProjectFcpxml } = await importFcpxmlExportService()
+      const xml = exportProjectFcpxml(project)
+      const blob = new Blob([xml], { type: 'application/xml' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${project.name.replace(/\s+/g, '_')}.fcpxml`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to export FCPXML', err)
+    }
+  }, [project])
+
+  const handleExportEdl = useCallback(async () => {
+    try {
+      const { exportProjectEdl } = await importFcpxmlExportService()
+      const edl = exportProjectEdl(project)
+      const blob = new Blob([edl], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${project.name.replace(/\s+/g, '_')}.edl`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to export EDL', err)
+    }
+  }, [project])
 
   return (
     <div
@@ -367,6 +401,14 @@ export const Toolbar = memo(function Toolbar({
             <DropdownMenuItem onClick={onExportBundle} className="gap-2">
               <FolderArchive className="h-4 w-4" />
               {t('toolbar.downloadProjectZip')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportFcpxml} className="gap-2">
+              <FileCode className="h-4 w-4" />
+              FCPXML (Final Cut / DaVinci)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportEdl} className="gap-2">
+              <FileCode className="h-4 w-4" />
+              EDL (CMX 3600)
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -75,8 +75,10 @@
     "sections": {
       "general": "General",
       "timeline": "Línea de tiempo",
-      "ai": "IA",
-      "storage": "Almacenamiento"
+      "ai": "Modelos y LLM",
+      "comfyui": "Workflows ComfyUI",
+      "captions": "Subtitulado IA",
+      "storage": "Almacenamiento y Caché"
     },
     "general": {
       "autoSave": "Guardado automático",

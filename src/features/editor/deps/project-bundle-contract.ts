@@ -12,3 +12,8 @@ export const importJsonExportService = () =>
   import('@/features/project-bundle/services/json-export-service')
 export const importJsonImportService = () =>
   import('@/features/project-bundle/services/json-import-service')
+export const importFcpxmlExportService = () =>
+  import('@/features/project-bundle/services/fcpxml-export-service')
+export const importFcpxmlImportService = () =>
+  import('@/features/project-bundle/services/fcpxml-import-service')
+

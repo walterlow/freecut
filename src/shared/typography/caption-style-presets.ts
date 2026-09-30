@@ -13,7 +13,7 @@
  */
 
 import type { TransformProperties } from '@/types/transform'
-import type { SubtitleSegmentItem, TextItem } from '@/types/timeline'
+import type { CaptionAnimationStyle, SubtitleSegmentItem, TextItem } from '@/types/timeline'
 
 export type CaptionStylePatch = Pick<
   TextItem,
@@ -32,7 +32,11 @@ export type CaptionStylePatch = Pick<
   | 'textPadding'
   | 'textShadow'
   | 'stroke'
-> & { transform?: TransformProperties }
+> & {
+  transform?: TransformProperties
+  captionAnimationStyle?: CaptionAnimationStyle
+  captionHighlightColor?: string
+}
 
 export interface CaptionStylePreset {
   id: string
@@ -144,7 +148,7 @@ export const CAPTION_STYLE_PRESETS: readonly CaptionStylePreset[] = [
   },
   {
     id: 'tiktok',
-    label: 'TikTok',
+    label: 'TikTok Classic',
     hintKey: 'editor.captionPresets.tiktokHint',
     patch: {
       fontFamily: 'Anton',
@@ -161,8 +165,81 @@ export const CAPTION_STYLE_PRESETS: readonly CaptionStylePreset[] = [
       textPadding: 0,
       textShadow: { offsetX: 0, offsetY: 4, blur: 8, color: 'rgba(0, 0, 0, 0.9)' },
       stroke: { width: 2, color: '#000000' },
+      captionAnimationStyle: 'none',
     },
     layout: { fontSizeRatio: 0.075, yRatio: 0, widthRatio: 0.9, heightRatio: 0.22 },
+  },
+  {
+    id: 'hormozi',
+    label: 'Hormozi Pop',
+    hintKey: 'editor.captionPresets.hormoziHint',
+    patch: {
+      fontFamily: 'Anton',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      underline: false,
+      color: '#ffffff',
+      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      backgroundRadius: 8,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.05,
+      letterSpacing: 1.5,
+      textPadding: 12,
+      textShadow: { offsetX: 0, offsetY: 4, blur: 10, color: 'rgba(0, 0, 0, 0.95)' },
+      stroke: { width: 2.5, color: '#000000' },
+      captionAnimationStyle: 'hormozi',
+      captionHighlightColor: '#FFEB3B',
+    },
+    layout: { fontSizeRatio: 0.08, yRatio: 0.15, widthRatio: 0.85, heightRatio: 0.2 },
+  },
+  {
+    id: 'mrbeast',
+    label: 'MrBeast Punch',
+    hintKey: 'editor.captionPresets.mrbeastHint',
+    patch: {
+      fontFamily: 'Impact',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      underline: false,
+      color: '#ffffff',
+      backgroundColor: undefined,
+      backgroundRadius: 0,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.0,
+      letterSpacing: 2,
+      textPadding: 0,
+      textShadow: { offsetX: 3, offsetY: 5, blur: 0, color: '#000000' },
+      stroke: { width: 3.5, color: '#000000' },
+      captionAnimationStyle: 'mrbeast',
+      captionHighlightColor: '#00FF66',
+    },
+    layout: { fontSizeRatio: 0.085, yRatio: 0.1, widthRatio: 0.9, heightRatio: 0.22 },
+  },
+  {
+    id: 'karaoke',
+    label: 'Karaoke Cyan',
+    hintKey: 'editor.captionPresets.karaokeHint',
+    patch: {
+      fontFamily: 'Inter',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      underline: false,
+      color: '#ffffff',
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      backgroundRadius: 8,
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1.15,
+      letterSpacing: 0.5,
+      textPadding: 8,
+      textShadow: { offsetX: 0, offsetY: 2, blur: 8, color: 'rgba(0, 229, 255, 0.6)' },
+      stroke: undefined,
+      captionAnimationStyle: 'karaoke',
+      captionHighlightColor: '#00E5FF',
+    },
+    layout: { fontSizeRatio: 0.05, yRatio: 0.35, widthRatio: 0.8, heightRatio: 0.16 },
   },
 ] as const
 
@@ -230,7 +307,7 @@ export function resolveCaptionStylePatch(
 function matchesPreset(item: SubtitleSegmentItem | TextItem, patch: CaptionStylePatch): boolean {
   for (const key of Object.keys(patch) as Array<keyof CaptionStylePatch>) {
     const expected = patch[key]
-    const actual = item[key]
+    const actual = (item as unknown as Record<string, unknown>)[key]
     if (!equalShallow(expected, actual)) return false
   }
   return true

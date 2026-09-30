@@ -42,6 +42,7 @@
     "headless:edit": "node headless/edit.mjs",
     "headless:serve": "node headless/serve.mjs",
     "headless:agent": "node headless/agent.mjs",
+    "headless:shorts": "node headless/auto-shorts.mjs",
     "headless:test": "npm run build && npm run headless:test:portable",
     "headless:test:node": "node --test headless/*.test.mjs",
     "headless:test:chrome": "node headless/test.mjs --skip-build && node headless/edit-operations.mjs && node headless/lifecycle-e2e.mjs",

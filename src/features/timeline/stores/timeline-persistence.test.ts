@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import type { Project } from '@/types/project'
 import type { CompositionItem, TextItem } from '@/types/timeline'
 import {
@@ -11,6 +11,18 @@ import { useCompositionsStore } from './compositions-store'
 import { useCompositionNavigationStore } from './composition-navigation-store'
 import { useKeyframesStore } from './keyframes-store'
 import { buildTimelineFromStores, hydrateTimelineStoresFromProject } from './timeline-persistence'
+
+const storageMocks = vi.hoisted(() => ({
+  getTranscriptMediaIds: vi.fn().mockResolvedValue(new Set()),
+}))
+
+vi.mock('@/infrastructure/storage', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    getTranscriptMediaIds: storageMocks.getTranscriptMediaIds,
+  }
+})
 
 const rootTrack = makeTimelineTrack({ id: 'root-track', name: 'Root', kind: 'video', order: 0 })
 const motionTrack = makeTimelineTrack({
@@ -356,5 +368,58 @@ describe('timeline project hydration', () => {
       (useItemsStore.getState().itemById['card-instance'] as CompositionItem)
         .compositionControlOverrides,
     ).toEqual({ headline: 'Launch day' })
+  })
+
+  it('strips transcriptCaptions when underlying transcript does not exist in storage', async () => {
+    storageMocks.getTranscriptMediaIds.mockResolvedValue(new Set(['media-valid']))
+
+    const itemWithOrphanedCaptions = {
+      ...makeTimelineVideoItem({ id: 'video-orphaned', trackId: rootTrack.id }),
+      mediaId: 'media-orphaned',
+      transcriptCaptions: {
+        type: 'transcript' as const,
+        mediaId: 'media-orphaned',
+        cues: [{ id: 'cue-1', startSeconds: 0, endSeconds: 2, text: 'Hello' }],
+        enabled: true,
+        updatedAt: 1,
+      },
+    }
+
+    const itemWithValidCaptions = {
+      ...makeTimelineVideoItem({ id: 'video-valid', trackId: rootTrack.id }),
+      mediaId: 'media-valid',
+      transcriptCaptions: {
+        type: 'transcript' as const,
+        mediaId: 'media-valid',
+        cues: [{ id: 'cue-2', startSeconds: 0, endSeconds: 2, text: 'World' }],
+        enabled: true,
+        updatedAt: 1,
+      },
+    }
+
+    const project: Project = {
+      id: 'project-with-captions',
+      name: 'Captions project',
+      description: '',
+      createdAt: 1,
+      updatedAt: 1,
+      duration: 10,
+      metadata: { width: 1920, height: 1080, fps: 30 },
+      timeline: {
+        tracks: [rootTrack],
+        items: [itemWithOrphanedCaptions, itemWithValidCaptions],
+      },
+    }
+
+    await hydrateTimelineStoresFromProject(project)
+
+    const orphanedResult = useItemsStore.getState().itemById['video-orphaned']
+    const validResult = useItemsStore.getState().itemById['video-valid']
+
+    expect((orphanedResult as typeof itemWithOrphanedCaptions)?.transcriptCaptions).toBeUndefined()
+    expect((validResult as typeof itemWithValidCaptions)?.transcriptCaptions).toBeDefined()
+    expect((validResult as typeof itemWithValidCaptions)?.transcriptCaptions?.cues[0]?.text).toBe(
+      'World',
+    )
   })
 })

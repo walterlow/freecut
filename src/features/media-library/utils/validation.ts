@@ -41,7 +41,7 @@ const GENERIC_BROWSER_MIME_TYPES = new Set(['', 'application/octet-stream', 'bin
 // mapping. `.mkv`/`.m4a` vary across browsers; `.json` is reported as the
 // non-media `application/json`, so a Lottie `.json` would otherwise be rejected
 // as unsupported before the content sniff in `validateMediaFileContent` runs.
-const EXTENSION_PREFERRED_MIME_TYPES = new Set(['.mkv', '.m4a', '.json'])
+const EXTENSION_PREFERRED_MIME_TYPES = new Set(['.mkv', '.m4a', '.json', '.insv', '.insp'])
 
 // Extension to MIME type mapping for fallback when browser doesn't provide MIME type
 const EXTENSION_TO_MIME: Record<string, string> = {
@@ -51,6 +51,7 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   '.mov': 'video/quicktime',
   '.mkv': 'video/x-matroska',
   '.avi': 'video/x-msvideo',
+  '.insv': 'video/mp4',
   // Audio
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
@@ -65,6 +66,7 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
+  '.insp': 'image/jpeg',
   // Lottie
   '.json': 'application/lottie+json',
   '.lottie': 'application/lottie+json',

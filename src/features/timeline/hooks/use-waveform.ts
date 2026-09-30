@@ -356,7 +356,9 @@ export function useWaveform({
 
             setProgress(0)
             ownsGenerationRef.current = !waveformCache.hasPendingGeneration(mediaId)
-            return waveformCache.getWaveform(mediaId, blobUrl, onProgress)
+            return waveformCache.getWaveform(mediaId, blobUrl, onProgress, {
+              duration: deferDurationSec,
+            })
           })
           .then((result) => {
             if (!result || cancelled || lastMediaIdRef.current !== requestMediaId) {

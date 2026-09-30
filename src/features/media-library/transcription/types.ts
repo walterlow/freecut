@@ -57,6 +57,9 @@ export interface TranscribeOptions {
   model?: WhisperModel
   language?: string
   quantization?: QuantizationType
+  mediaId?: string
+  fileName?: string
+  workspaceName?: string
   onSegment?: (segment: TranscriptSegment) => void
   onProgress?: (event: TranscribeProgress) => void
   onRuntimeInfo?: (info: TranscribeRuntimeInfo) => void

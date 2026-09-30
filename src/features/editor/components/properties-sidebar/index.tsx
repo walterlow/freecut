@@ -9,7 +9,8 @@ import {
   useRef,
   useState,
 } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { motion } from 'motion/react'
+import { usePrefersReducedMotion } from '@/shared/hooks/use-prefers-reduced-motion'
 import { useTranslation } from 'react-i18next'
 import { i18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
@@ -144,7 +145,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
   const activeCompositionName = useCompositionsStore((s) =>
     activeCompositionId ? s.compositionById[activeCompositionId]?.name : undefined,
   )
-  const prefersReducedMotion = useReducedMotion()
+  const prefersReducedMotion = usePrefersReducedMotion()
   const selectedItemHeaderSignature = useItemsStore(
     useCallback(
       (state) =>

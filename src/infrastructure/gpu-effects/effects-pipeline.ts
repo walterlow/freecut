@@ -917,11 +917,17 @@ export class EffectsPipeline {
     }
 
     // Compute destination rect in UV space [0..1]
+    const hasSpherical360 = enabled.some(
+      (e) => e.type === 'gpu-projection-360' && e.params?.sourceMode === 'spherical_360',
+    )
+    const effectiveDestRect = hasSpherical360
+      ? { x: 0, y: 0, width: w, height: h }
+      : destRect
     const uvRect = new Float32Array([
-      destRect.x / w,
-      destRect.y / h,
-      (destRect.x + destRect.width) / w,
-      (destRect.y + destRect.height) / h,
+      effectiveDestRect.x / w,
+      effectiveDestRect.y / h,
+      (effectiveDestRect.x + effectiveDestRect.width) / w,
+      (effectiveDestRect.y + effectiveDestRect.height) / h,
     ])
     this.device.queue.writeBuffer(this.importUniformBuffer, 0, uvRect.buffer)
 
@@ -1036,11 +1042,17 @@ export class EffectsPipeline {
       return false
     }
 
+    const hasSpherical360 = enabled.some(
+      (e) => e.type === 'gpu-projection-360' && e.params?.sourceMode === 'spherical_360',
+    )
+    const effectiveDestRect = hasSpherical360
+      ? { x: 0, y: 0, width: w, height: h }
+      : destRect
     const uvRect = new Float32Array([
-      destRect.x / w,
-      destRect.y / h,
-      (destRect.x + destRect.width) / w,
-      (destRect.y + destRect.height) / h,
+      effectiveDestRect.x / w,
+      effectiveDestRect.y / h,
+      (effectiveDestRect.x + effectiveDestRect.width) / w,
+      (effectiveDestRect.y + effectiveDestRect.height) / h,
     ])
     this.device.queue.writeBuffer(this.importUniformBuffer, 0, uvRect.buffer)
 

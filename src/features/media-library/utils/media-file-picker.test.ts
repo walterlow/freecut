@@ -47,6 +47,7 @@ describe('media-file-picker', () => {
       'MOV',
       'AVI',
       'MKV',
+      'INSV',
       'MP3',
       'WAV',
       'OGG',
@@ -58,6 +59,7 @@ describe('media-file-picker', () => {
       'GIF',
       'WebP',
       'SVG',
+      'INSP',
       'JSON',
       'LOTTIE',
     ])

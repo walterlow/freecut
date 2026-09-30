@@ -205,24 +205,24 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     outlineProgress = fract(outlineProgress - u.trimParams.z + 1.0);
     let trimStart = u.trimParams.x;
     let trimEnd = u.trimParams.y;
-    strokeVisible = select(
-      outlineProgress >= trimStart || outlineProgress < trimEnd,
-      outlineProgress >= trimStart && outlineProgress < trimEnd,
-      trimEnd >= trimStart,
-    );
+    if (trimEnd >= trimStart) {
+      strokeVisible = (outlineProgress >= trimStart) && (outlineProgress <= trimEnd);
+    } else {
+      strokeVisible = (outlineProgress >= trimStart) || (outlineProgress <= trimEnd);
+    }
     let visibleLength = select(1.0 - trimStart + trimEnd, trimEnd - trimStart, trimEnd >= trimStart);
     taperProgress = clamp(fract(outlineProgress - trimStart + 1.0) / max(visibleLength, 0.001), 0.0, 1.0);
   }
   let startScale = select(
     1.0,
     mix(u.taperParams.x, 1.0, taperProgress / max(u.taperParams.z, 0.001)),
-    u.taperParams.z > 0.0 && taperProgress < u.taperParams.z,
+    u.taperParams.z > 0.0 && (taperProgress < u.taperParams.z),
   );
   let distanceFromEnd = 1.0 - taperProgress;
   let endScale = select(
     1.0,
     mix(u.taperParams.y, 1.0, distanceFromEnd / max(u.taperParams.w, 0.001)),
-    u.taperParams.w > 0.0 && distanceFromEnd < u.taperParams.w,
+    u.taperParams.w > 0.0 && (distanceFromEnd < u.taperParams.w),
   );
   let strokeWidth = max(u.shapeParams.y * startScale * endScale, 0.0);
   var strokeAlpha = select(0.0, 1.0 - smoothstep(strokeWidth - 0.75, strokeWidth + 0.75, abs(d)), strokeWidth > 0.0 && strokeVisible);

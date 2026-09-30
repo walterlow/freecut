@@ -25,9 +25,13 @@ export function useAutoTranscriptCaptions({
   const attemptRef = useRef<string | null>(null)
 
   useEffect(() => {
+    if (!caption.mediaHasTranscript) {
+      attemptRef.current = null
+      return
+    }
+
     if (
       !caption.canManageCaptions ||
-      !caption.mediaHasTranscript ||
       hasGeneratedCaptions ||
       isBroken ||
       (item.type !== 'video' && item.type !== 'audio') ||

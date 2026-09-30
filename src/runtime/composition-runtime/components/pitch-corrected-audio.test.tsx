@@ -35,13 +35,16 @@ const playbackStateMocks = vi.hoisted(() => ({
 
 const previewAudioMocks = vi.hoisted(() => {
   const state: { current: HTMLAudioElement | null } = { current: null }
+  let defaultReadyState = 4
+  const listeners = new Map<string, Set<() => void>>()
+
   const createAudio = () =>
     ({
       volume: 1,
       muted: false,
       playbackRate: 1,
       currentTime: 0,
-      readyState: 4,
+      readyState: defaultReadyState,
       paused: true,
       seeking: false,
       play: vi.fn().mockImplementation(function (this: { paused: boolean }) {
@@ -51,12 +54,30 @@ const previewAudioMocks = vi.hoisted(() => {
       pause: vi.fn().mockImplementation(function (this: { paused: boolean }) {
         this.paused = true
       }),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
+      addEventListener: vi.fn((event: string, handler: () => void) => {
+        let set = listeners.get(event)
+        if (!set) {
+          set = new Set()
+          listeners.set(event, set)
+        }
+        set.add(handler)
+      }),
+      removeEventListener: vi.fn((event: string, handler: () => void) => {
+        listeners.get(event)?.delete(handler)
+      }),
     }) as unknown as HTMLAudioElement
 
   return {
     state,
+    get defaultReadyState() {
+      return defaultReadyState
+    },
+    set defaultReadyState(value: number) {
+      defaultReadyState = value
+    },
+    dispatchAudioEvent: (event: string) => {
+      listeners.get(event)?.forEach((handler) => handler())
+    },
     acquirePreviewAudioElement: vi.fn(() => {
       const audio = createAudio()
       state.current = audio
@@ -159,6 +180,7 @@ function makeAudioBuffer(durationSeconds = 8): AudioBuffer {
 describe('PitchCorrectedAudio', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    previewAudioMocks.defaultReadyState = 4
     clockRateMocks.current = 1
     playbackStateMocks.current = {
       frame: 0,
@@ -407,5 +429,58 @@ describe('PitchCorrectedAudio', () => {
     expect(reverseOptions?.targetTimeSeconds).toBeCloseTo(10, 4)
     expect(reverseOptions?.preRollSeconds).toBe(4)
     expect(document.querySelector('[data-testid="pitch"]')).toBeInTheDocument()
+  })
+
+  it('plays native audio immediately when readyState >= 2 and playing', async () => {
+    previewAudioMocks.defaultReadyState = 2
+    playbackStateMocks.current = {
+      ...playbackStateMocks.current,
+      playing: true,
+    }
+    render(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+      />,
+    )
+
+    await waitFor(() => {
+      const audio = previewAudioMocks.state.current
+      expect(audio?.play).toHaveBeenCalled()
+    })
+  })
+
+  it('waits for canplay when readyState is 1 and plays once buffered', async () => {
+    previewAudioMocks.defaultReadyState = 1
+    playbackStateMocks.current = {
+      ...playbackStateMocks.current,
+      playing: true,
+    }
+    render(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+      />,
+    )
+
+    const audio = previewAudioMocks.state.current!
+    expect(audio.play).not.toHaveBeenCalled()
+    expect(audio.addEventListener).toHaveBeenCalledWith('canplay', expect.any(Function), {
+      once: true,
+    })
+
+    // Simulate media arriving from external drive
+    audio.readyState = 2
+    previewAudioMocks.dispatchAudioEvent('canplay')
+
+    await waitFor(() => {
+      expect(audio.play).toHaveBeenCalledTimes(1)
+    })
   })
 })

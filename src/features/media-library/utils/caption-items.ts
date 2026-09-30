@@ -887,6 +887,12 @@ export function buildSubtitleSegmentForClip(
       startSeconds: cueStartTimeline,
       endSeconds: cueEndTimeline,
       text: cue.text,
+      words: cue.words?.map((w) => ({
+        word: w.word,
+        start: (w.start - sourceStartSeconds) / speed,
+        end: (w.end - sourceStartSeconds) / speed,
+        confidence: w.confidence,
+      })),
     })
     if (cueStartFrames < firstFromOffset) firstFromOffset = cueStartFrames
     if (cueEndFrames > lastEndOffset) lastEndOffset = cueEndFrames
@@ -908,6 +914,12 @@ export function buildSubtitleSegmentForClip(
     startSeconds: cue.startSeconds - segmentFromOffset / timelineFps,
     endSeconds: cue.endSeconds - segmentFromOffset / timelineFps,
     text: cue.text,
+    words: cue.words?.map((w) => ({
+      word: w.word,
+      start: w.start - segmentFromOffset / timelineFps,
+      end: w.end - segmentFromOffset / timelineFps,
+      confidence: w.confidence,
+    })),
   }))
 
   const defaultStyle = {

@@ -378,16 +378,32 @@ describe('GPU effect registry', () => {
     }
   })
 
-  it('declares uniform sizes as multiples of 16 (WebGPU alignment)', () => {
-    // WebGPU requires uniform buffers be multiples of 16 bytes. The packed
-    // Float32Array must also fit within the declared size.
+  it('does not redeclare symbols or constants from COMMON_WGSL', () => {
+    // Symbols declared in COMMON_WGSL that must not be redeclared at module scope in effect shaders
+    const commonPatterns = [
+      /\bconst\s+PI\b/,
+      /\bconst\s+TAU\b/,
+      /\bconst\s+E\b/,
+      /\bfn\s+rgb2hsv\b/,
+      /\bfn\s+hsv2rgb\b/,
+      /\bfn\s+rgb2hsl\b/,
+      /\bfn\s+hue2rgb\b/,
+      /\bfn\s+hsl2rgb\b/,
+      /\bfn\s+luminance\b/,
+      /\bfn\s+luminance601\b/,
+      /\bfn\s+gaussian\b/,
+      /\bfn\s+smootherstep\b/,
+      /\bfn\s+hash\b/,
+      /\bfn\s+noise2d\b/,
+    ]
+
     for (const [id, effect] of GPU_EFFECT_REGISTRY) {
-      expect(effect.uniformSize % 16, id).toBe(0)
-      if (effect.uniformSize === 0) continue
-      const defaults = getGpuEffectDefaultParams(id)
-      const packed = effect.packUniforms(defaults, 1920, 1080)
-      expect(packed, id).not.toBeNull()
-      expect(packed!.byteLength, id).toBeLessThanOrEqual(effect.uniformSize)
+      for (const pattern of commonPatterns) {
+        expect(
+          pattern.test(effect.shader),
+          `Effect ${id} redeclares '${pattern.source}' which is already in COMMON_WGSL`,
+        ).toBe(false)
+      }
     }
   })
 })

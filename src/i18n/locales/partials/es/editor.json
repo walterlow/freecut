@@ -578,7 +578,8 @@
       "bold": "Negrita",
       "underline": "Subrayado",
       "cuePosition": "Posición del subtítulo: {{vertical}} {{horizontal}}",
-      "showSubtitle": "Mostrar subtítulo"
+      "showSubtitle": "Mostrar subtítulo",
+      "deleteSubtitles": "Eliminar subtítulos"
     },
     "audioSection": {
       "audio": "Audio",
@@ -678,6 +679,7 @@
     },
     "mediaSidebar": {
       "media": "Medios",
+      "audio": "Audio",
       "text": "Texto",
       "shapes": "Formas",
       "effects": "Efectos",

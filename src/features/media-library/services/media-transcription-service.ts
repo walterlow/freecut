@@ -4,6 +4,7 @@ import {
   getTranscriptMediaIds,
   saveTranscript,
 } from '@/infrastructure/storage'
+import { getWorkspaceRoot } from '@/infrastructure/storage/workspace-fs/root'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useSelectionStore } from '@/shared/state/selection'
 import { createLogger } from '@/shared/logging/logger'
@@ -13,6 +14,7 @@ import type { MediaTranscript, MediaTranscriptModel, MediaTranscriptSegment } fr
 import type {
   AudioItem,
   SubtitleSegmentItem,
+  TextItem,
   TimelineTranscriptCaptionCue,
   TimelineItem,
   TimelineTrack,
@@ -23,6 +25,7 @@ import {
   getDefaultMediaTranscriptionAdapter,
   getMediaTranscriptionModelLabel,
 } from '../transcription/registry'
+import { resolveMediaTranscriber } from '../transcription/external/resolve-transcriber'
 import { importMediaLibraryService } from './media-library-service-loader'
 import {
   buildSubtitleSegmentForClip,
@@ -42,6 +45,7 @@ import {
   useCompositionsStore,
   useTimelineStore,
 } from '@/features/media-library/deps/timeline-stores'
+import { useMediaLibraryStore } from '../stores/media-library-store'
 import { useSettingsStore } from '@/features/media-library/deps/settings-contract'
 import {
   needsCustomAudioDecoder,
@@ -285,6 +289,12 @@ function buildTimelineTranscriptCaptionCues(
     startSeconds: segment.start,
     endSeconds: segment.end,
     text: segment.text,
+    words: segment.words?.map((w) => ({
+      word: w.text,
+      start: w.start,
+      end: w.end,
+      confidence: w.confidence,
+    })),
   }))
 }
 
@@ -293,15 +303,96 @@ function buildSyncedTranscriptCaptionItem(
   mediaId: string,
   transcript: MediaTranscript,
   sourceCues: TimelineTranscriptCaptionCue[],
+  allItems: readonly TimelineItem[] = [],
+  timelineFps = 30,
+  canvasWidth = DEFAULT_PROJECT_WIDTH,
+  canvasHeight = DEFAULT_PROJECT_HEIGHT,
 ): TimelineItem | null {
-  if (
-    (item.type !== 'video' && item.type !== 'audio') ||
-    item.mediaId !== mediaId ||
-    item.transcriptCaptions?.type !== 'transcript' ||
-    item.transcriptCaptions.mediaId !== mediaId ||
-    (item.transcriptCaptions.sourceTranscriptUpdatedAt === transcript.updatedAt &&
-      item.transcriptCaptions.timingVersion === TRANSCRIPT_CAPTION_TIMING_VERSION)
-  ) {
+  if (item.type === 'subtitle') {
+    const isMatchingSubtitle =
+      (item.source?.type === 'transcript' && item.source.mediaId === mediaId) ||
+      item.mediaId === mediaId
+    if (!isMatchingSubtitle) return null
+
+    // If tied to a clip, re-run buildSubtitleSegmentForClip with the updated cues
+    if (item.source?.clipId) {
+      const clip = allItems.find((candidate) => candidate.id === item.source?.clipId) as
+        | AudioItem
+        | VideoItem
+        | undefined
+      if (clip) {
+        const regenerated = buildSubtitleSegmentForClip({
+          trackId: item.trackId,
+          cues: buildTimelineTranscriptCaptionCues(clip.id, transcript.segments),
+          clip,
+          timelineFps,
+          canvasWidth,
+          canvasHeight,
+          label: item.label,
+          source: item.source,
+          styleTemplate: getCaptionTextItemTemplate(item),
+        })
+        if (regenerated) {
+          return {
+            ...item,
+            cues: regenerated.cues,
+          }
+        }
+      }
+    }
+
+    // Fallback for standalone/detached subtitle item: slice and adapt sourceCues to segment duration
+    const segmentFromSec = item.from / timelineFps
+    const segmentDurationSec = item.durationInFrames / timelineFps
+    const segmentToSec = segmentFromSec + segmentDurationSec
+    const adaptedCues = sourceCues
+      .filter((cue) => cue.endSeconds > segmentFromSec && cue.startSeconds < segmentToSec)
+      .map((cue) => ({
+        id: cue.id,
+        startSeconds: Math.max(0, cue.startSeconds - segmentFromSec),
+        endSeconds: Math.min(segmentDurationSec, cue.endSeconds - segmentFromSec),
+        text: cue.text,
+        words: cue.words?.map((w) => ({
+          word: w.word,
+          start: Math.max(0, w.start - segmentFromSec),
+          end: Math.min(segmentDurationSec, w.end - segmentFromSec),
+          confidence: w.confidence,
+        })),
+      }))
+
+    return {
+      ...item,
+      cues: adaptedCues,
+    }
+  }
+
+  if (item.type === 'text') {
+    const isMatchingText =
+      item.captionSource?.type === 'transcript' && item.captionSource.mediaId === mediaId
+    if (!isMatchingText) return null
+
+    const itemStartSec = item.from / timelineFps
+    const matchingCue =
+      sourceCues.find(
+        (c) => c.startSeconds <= itemStartSec + 0.05 && c.endSeconds >= itemStartSec - 0.05,
+      ) ?? sourceCues.find((c) => Math.abs(c.startSeconds - itemStartSec) < 0.2)
+    if (!matchingCue) return null
+
+    return {
+      ...item,
+      text: matchingCue.text,
+      label: matchingCue.text.slice(0, 48),
+    }
+  }
+
+  if (item.type !== 'video' && item.type !== 'audio') {
+    return null
+  }
+
+  const isMatchingClip =
+    (item.mediaId === mediaId || item.transcriptCaptions?.mediaId === mediaId) &&
+    item.transcriptCaptions?.type === 'transcript'
+  if (!isMatchingClip || !item.transcriptCaptions) {
     return null
   }
 
@@ -322,10 +413,22 @@ function syncTranscriptCaptionItems(
   mediaId: string,
   transcript: MediaTranscript,
   sourceCues: TimelineTranscriptCaptionCue[],
+  timelineFps = 30,
+  canvasWidth = DEFAULT_PROJECT_WIDTH,
+  canvasHeight = DEFAULT_PROJECT_HEIGHT,
 ): { items: TimelineItem[]; updatedClipCount: number } {
   let updatedClipCount = 0
   const nextItems = items.map((item) => {
-    const updatedItem = buildSyncedTranscriptCaptionItem(item, mediaId, transcript, sourceCues)
+    const updatedItem = buildSyncedTranscriptCaptionItem(
+      item,
+      mediaId,
+      transcript,
+      sourceCues,
+      items,
+      timelineFps,
+      canvasWidth,
+      canvasHeight,
+    )
     if (!updatedItem) return item
     updatedClipCount += 1
     return updatedItem
@@ -366,7 +469,192 @@ class MediaTranscriptionService {
 
   async deleteTranscript(mediaId: string): Promise<void> {
     await deleteTranscript(mediaId)
+    this.clearExistingTranscriptCaptions(mediaId)
     this.emitTranscriptChanged(mediaId)
+  }
+
+  /**
+   * Updates an existing transcript, persists it to storage, and syncs
+   * any active timeline captions and registered compositions.
+   */
+  async updateTranscript(transcript: MediaTranscript): Promise<void> {
+    const updated: MediaTranscript = {
+      ...transcript,
+      updatedAt: Date.now(),
+    }
+    await saveTranscript(updated)
+    this.syncExistingTranscriptCaptions(updated.mediaId, updated)
+    this.emitTranscriptChanged(updated.mediaId)
+  }
+
+  /**
+   * Clear transcript-derived cues and remove generated subtitle items for a media item.
+   * Cleans active timeline clips, generated subtitle/text items on tracks, registered
+   * compositions, and composition navigation stashes. Also resets media library transcript status.
+   */
+  clearExistingTranscriptCaptions(mediaId: string): {
+    updatedClipCount: number
+    removedItemCount: number
+  } {
+    const timeline = useTimelineStore.getState?.()
+    let updatedClipCount = 0
+
+    // 1. Clear transcriptCaptions on any active timeline clips referencing mediaId
+    if (timeline?.items) {
+      for (const item of timeline.items) {
+        if (
+          (item.type === 'video' || item.type === 'audio') &&
+          (item.mediaId === mediaId || item.transcriptCaptions?.mediaId === mediaId) &&
+          item.transcriptCaptions !== undefined
+        ) {
+          timeline.updateItem?.(item.id, {
+            transcriptCaptions: undefined,
+          } as Partial<TimelineItem>)
+          updatedClipCount += 1
+        }
+      }
+    }
+
+    // 2. Remove any generated caption items on timeline tracks for this mediaId
+    const generatedCaptionIdsToRemove = new Set<string>()
+    if (timeline?.items) {
+      for (const item of timeline.items) {
+        if (item.type === 'subtitle') {
+          const seg = item as SubtitleSegmentItem
+          if (seg.source?.type === 'transcript' && seg.source.mediaId === mediaId) {
+            generatedCaptionIdsToRemove.add(seg.id)
+          }
+        } else if (item.type === 'text') {
+          const txt = item as TextItem
+          if (txt.captionSource?.type === 'transcript' && txt.captionSource.mediaId === mediaId) {
+            generatedCaptionIdsToRemove.add(txt.id)
+          }
+        }
+      }
+
+      // Also remove replaceable caption items for any clip belonging to this mediaId
+      const mediaClips = timeline.items.filter(
+        (item): item is CaptionableClip =>
+          (item.type === 'video' || item.type === 'audio') && item.mediaId === mediaId,
+      )
+      for (const clip of mediaClips) {
+        const replaceable = findReplaceableCaptionItemsForClip(timeline.items, clip, 'transcript')
+        for (const rep of replaceable) {
+          generatedCaptionIdsToRemove.add(rep.id)
+        }
+      }
+    }
+
+    if (generatedCaptionIdsToRemove.size > 0) {
+      removeTimelineItemsExact([...generatedCaptionIdsToRemove])
+    }
+
+    // 3. Clear transcriptCaptions and caption items in registered compositions
+    const compositionsState = useCompositionsStore.getState?.()
+    if (compositionsState?.compositions) {
+      for (const composition of compositionsState.compositions) {
+        let compChanged = false
+        const filteredItems = (composition.items ?? [])
+          .filter((item) => {
+            if (item.type === 'subtitle') {
+              const seg = item as SubtitleSegmentItem
+              if (seg.source?.type === 'transcript' && seg.source.mediaId === mediaId) {
+                return false
+              }
+            } else if (item.type === 'text') {
+              const txt = item as TextItem
+              if (txt.captionSource?.type === 'transcript' && txt.captionSource.mediaId === mediaId) {
+                return false
+              }
+            }
+            return true
+          })
+          .map((item) => {
+            if (
+              (item.type === 'video' || item.type === 'audio') &&
+              (item.mediaId === mediaId || item.transcriptCaptions?.mediaId === mediaId) &&
+              item.transcriptCaptions !== undefined
+            ) {
+              compChanged = true
+              const clone = { ...item }
+              delete clone.transcriptCaptions
+              return clone
+            }
+            return item
+          })
+
+        if (compChanged || filteredItems.length !== (composition.items ?? []).length) {
+          compositionsState.updateComposition?.(composition.id, { items: filteredItems })
+          updatedClipCount += 1
+        }
+      }
+    }
+
+    // 4. Clear from composition navigation stashes
+    const navigationState = useCompositionNavigationStore.getState?.()
+    if (navigationState) {
+      const cleanItems = (items: TimelineItem[]): TimelineItem[] => {
+        return (items ?? [])
+          .filter((item) => {
+            if (item.type === 'subtitle') {
+              const seg = item as SubtitleSegmentItem
+              if (seg.source?.type === 'transcript' && seg.source.mediaId === mediaId) {
+                return false
+              }
+            } else if (item.type === 'text') {
+              const txt = item as TextItem
+              if (txt.captionSource?.type === 'transcript' && txt.captionSource.mediaId === mediaId) {
+                return false
+              }
+            }
+            return true
+          })
+          .map((item) => {
+            if (
+              (item.type === 'video' || item.type === 'audio') &&
+              (item.mediaId === mediaId || item.transcriptCaptions?.mediaId === mediaId) &&
+              item.transcriptCaptions !== undefined
+            ) {
+              const clone = { ...item }
+              delete clone.transcriptCaptions
+              return clone
+            }
+            return item
+          })
+      }
+
+      let updatedStashed = false
+      const nextStashStack = (navigationState.stashStack ?? []).map((stash) => {
+        const cleaned = cleanItems(stash.items)
+        if (cleaned.length !== stash.items.length || cleaned.some((item, i) => item !== stash.items[i])) {
+          updatedStashed = true
+        }
+        return { ...stash, items: cleaned }
+      })
+      const nextMainHolder = navigationState.mainHolder
+        ? { ...navigationState.mainHolder, items: cleanItems(navigationState.mainHolder.items) }
+        : null
+
+      if (updatedStashed || nextMainHolder !== navigationState.mainHolder) {
+        useCompositionNavigationStore.setState?.({
+          stashStack: nextStashStack,
+          mainHolder: nextMainHolder,
+        })
+      }
+    }
+
+    // 5. Update media library store status and progress
+    try {
+      useMediaLibraryStore.getState?.().setTranscriptStatus?.(mediaId, 'idle')
+      useMediaLibraryStore.getState?.().clearTranscriptProgress?.(mediaId)
+    } catch {
+      // In isolated environments/tests where store is not initialized, ignore
+    }
+
+    return {
+      updatedClipCount,
+      removedItemCount: generatedCaptionIdsToRemove.size,
+    }
   }
 
   async transcribeMedia(
@@ -567,10 +855,22 @@ class MediaTranscriptionService {
             lastModified: media.fileLastModified ?? Date.now(),
           })
 
-    const stream = this.transcriber.transcribe(file, {
+    const isExternal =
+      typeof job.model === 'string' &&
+      (job.model.startsWith('whisper-local:') ||
+        job.model.startsWith('comfyui:') ||
+        job.model.startsWith('groq:') ||
+        job.model.startsWith('openai:') ||
+        job.model.startsWith('gemini:') ||
+        job.model.startsWith('ollama:'))
+    const transcriber = isExternal ? resolveMediaTranscriber(job.model) : this.transcriber
+    const stream = transcriber.transcribe(file, {
       model: job.model,
       language: job.language,
       quantization: job.quantization,
+      mediaId,
+      fileName: media.fileName,
+      workspaceName: getWorkspaceRoot()?.name,
       onProgress: (progress) => {
         for (const listener of job.listeners) {
           listener.onProgress?.(progress)
@@ -610,15 +910,39 @@ class MediaTranscriptionService {
    */
   syncExistingTranscriptCaptions(mediaId: string, transcript: MediaTranscript): number {
     const timeline = useTimelineStore.getState()
+    const project = useProjectStore.getState()?.currentProject
+    const canvasWidth = project?.metadata.width ?? DEFAULT_PROJECT_WIDTH
+    const canvasHeight = project?.metadata.height ?? DEFAULT_PROJECT_HEIGHT
+    const timelineFps = timeline.fps ?? 30
     const sourceCues = buildTimelineTranscriptCaptionCues(mediaId, transcript.segments)
     let updatedClipCount = 0
 
     for (const item of timeline.items ?? []) {
-      const updatedItem = buildSyncedTranscriptCaptionItem(item, mediaId, transcript, sourceCues)
+      const updatedItem = buildSyncedTranscriptCaptionItem(
+        item,
+        mediaId,
+        transcript,
+        sourceCues,
+        timeline.items ?? [],
+        timelineFps,
+        canvasWidth,
+        canvasHeight,
+      )
       if (!updatedItem) continue
-      timeline.updateItem?.(item.id, {
-        transcriptCaptions: updatedItem.transcriptCaptions,
-      } as Partial<TimelineItem>)
+      if (updatedItem.type === 'subtitle') {
+        timeline.updateItem?.(item.id, {
+          cues: (updatedItem as SubtitleSegmentItem).cues,
+        } as Partial<TimelineItem>)
+      } else if (updatedItem.type === 'text') {
+        timeline.updateItem?.(item.id, {
+          text: (updatedItem as TextItem).text,
+          label: (updatedItem as TextItem).label,
+        } as Partial<TimelineItem>)
+      } else {
+        timeline.updateItem?.(item.id, {
+          transcriptCaptions: updatedItem.transcriptCaptions,
+        } as Partial<TimelineItem>)
+      }
       updatedClipCount += 1
     }
 
@@ -626,15 +950,18 @@ class MediaTranscriptionService {
     // registered composition so deeply nested and reused instances cannot keep
     // an older transcript snapshot.
     const compositionsState = useCompositionsStore.getState()
-    for (const composition of compositionsState.compositions) {
+    for (const composition of compositionsState.compositions ?? []) {
       const synced = syncTranscriptCaptionItems(
-        composition.items,
+        composition.items ?? [],
         mediaId,
         transcript,
         sourceCues,
+        timelineFps,
+        canvasWidth,
+        canvasHeight,
       )
       if (synced.updatedClipCount === 0) continue
-      compositionsState.updateComposition(composition.id, { items: synced.items })
+      compositionsState.updateComposition?.(composition.id, { items: synced.items })
       updatedClipCount += synced.updatedClipCount
     }
 
@@ -642,22 +969,36 @@ class MediaTranscriptionService {
     // stashes and can later overwrite the composition registry. Keep those
     // snapshots in sync too.
     const navigationState = useCompositionNavigationStore.getState()
-    let updatedStashedClipCount = 0
-    const syncStash = <T extends { items: TimelineItem[] }>(stash: T): T => {
-      const synced = syncTranscriptCaptionItems(stash.items, mediaId, transcript, sourceCues)
-      updatedStashedClipCount += synced.updatedClipCount
-      return synced.updatedClipCount > 0 ? { ...stash, items: synced.items } : stash
+    if (navigationState) {
+      let updatedStashedClipCount = 0
+      const syncStash = <T extends { items: TimelineItem[] }>(stash: T): T => {
+        const synced = syncTranscriptCaptionItems(
+          stash.items ?? [],
+          mediaId,
+          transcript,
+          sourceCues,
+          timelineFps,
+          canvasWidth,
+          canvasHeight,
+        )
+        updatedStashedClipCount += synced.updatedClipCount
+        return synced.updatedClipCount > 0 ? { ...stash, items: synced.items } : stash
+      }
+      const nextStashStack = (navigationState.stashStack ?? []).map(syncStash)
+      const nextMainHolder = navigationState.mainHolder
+        ? syncStash(navigationState.mainHolder)
+        : null
+      if (updatedStashedClipCount > 0) {
+        useCompositionNavigationStore.setState?.({
+          stashStack: nextStashStack,
+          mainHolder: nextMainHolder,
+        })
+        updatedClipCount += updatedStashedClipCount
+      }
     }
-    const nextStashStack = navigationState.stashStack.map(syncStash)
-    const nextMainHolder = navigationState.mainHolder
-      ? syncStash(navigationState.mainHolder)
-      : null
-    if (updatedStashedClipCount > 0) {
-      useCompositionNavigationStore.setState({
-        stashStack: nextStashStack,
-        mainHolder: nextMainHolder,
-      })
-      updatedClipCount += updatedStashedClipCount
+
+    if (updatedClipCount > 0 && project?.id) {
+      void timeline.saveTimeline?.(project.id).catch(() => {})
     }
 
     return updatedClipCount

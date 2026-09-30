@@ -75,8 +75,10 @@
     "sections": {
       "general": "General",
       "timeline": "Timeline",
-      "ai": "AI",
-      "storage": "Storage"
+      "ai": "AI & LLM Models",
+      "comfyui": "ComfyUI Workflows",
+      "captions": "AI Captions",
+      "storage": "Storage & Cache"
     },
     "general": {
       "autoSave": "Auto-save",

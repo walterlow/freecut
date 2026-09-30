@@ -6,7 +6,7 @@ import { usePlaybackStore } from '@/shared/state/playback'
 import { getBrowserMediaPlaybackRate } from '@/shared/state/playback/shuttle'
 import { useEditorStore } from '@/shared/state/editor'
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
-import { useCompositionsStore } from '@/features/preview/deps/timeline-store'
+import { useCompositionsStore, useItemsStore } from '@/features/preview/deps/timeline-store'
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
 import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline'
 import type { ResolvedTransitionWindow } from '@/shared/timeline/transitions/transition-planner'
@@ -167,7 +167,7 @@ function getGizmoPreviewInvalidation(
     state.colorGradeBypassed !== prev.colorGradeBypassed ||
     state.colorGradeComparisonMode !== prev.colorGradeComparisonMode
 
-  if (gradeBypassChanged) return 'all'
+  if (gradeBypassChanged || (prev.preview && !state.preview)) return 'all'
   if (unifiedPreviewChanged || (transformPreviewChanged && state.activeGizmo)) return 'frame'
   return null
 }
@@ -2873,6 +2873,38 @@ export function usePreviewRenderPump({
       void pumpRenderLoop()
     })
 
+    // When items or their effects/adjustment layers change, evict stale frame caches
+    // and re-composite the current paused frame immediately.
+    let lastObservedItems = useItemsStore.getState().items
+    const unsubscribeItems = useItemsStore.subscribe((state) => {
+      if (state.items === lastObservedItems) return
+      const prevItems = lastObservedItems
+      lastObservedItems = state.items
+
+      const effectsOrAdjustmentChanged =
+        state.items.length !== prevItems.length ||
+        state.items.some((item, i) => {
+          const prevItem = prevItems[i]
+          if (!prevItem || prevItem.id !== item.id) return true
+          if (item.type === 'adjustment' || prevItem.type === 'adjustment') return true
+          return item.effects !== prevItem.effects
+        })
+
+      if (!effectsOrAdjustmentChanged) return
+
+      if (scrubRendererRef.current) {
+        scrubRendererRef.current.invalidateFrameCache()
+        scrubOffscreenRenderedFrameRef.current = null
+      }
+      setDisplayedFrame(null)
+      clearReleasedScrubSnapshotGuard()
+
+      const playbackState = usePlaybackStore.getState()
+      const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame
+      scrubRequestedFrameRef.current = targetFrame
+      void pumpRenderLoop()
+    })
+
     const initialPlaybackState = usePlaybackStore.getState()
     const initialRenderedPlayback = usesRenderedPlaybackOverlay(initialPlaybackState)
     if (initialRenderedPlayback) {
@@ -3099,6 +3131,7 @@ export function usePreviewRenderPump({
       unsubscribeGizmo()
       unsubscribeCornerPin()
       unsubscribeMaskEditor()
+      unsubscribeItems()
     }
   }, [
     disposeFastScrubRenderer,

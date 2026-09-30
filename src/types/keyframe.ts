@@ -36,6 +36,13 @@ export type BuiltInAnimatableProperty =
   | 'taperEndWidth'
   | 'taperStartLength'
   | 'taperEndLength'
+  | 'projectionFov'
+  | 'projectionDistance'
+  | 'projectionDistortion'
+  | 'projectionYaw'
+  | 'projectionPitch'
+  | 'projectionRoll'
+  | 'projectionHorizonOffset'
 
 export type EffectAnimatableProperty = `effect:${string}:${string}:${string}`
 
@@ -490,6 +497,13 @@ const BUILT_IN_PROPERTY_LABELS: Record<BuiltInAnimatableProperty, string> = {
   taperEndWidth: 'Taper End Width',
   taperStartLength: 'Taper Start Length',
   taperEndLength: 'Taper End Length',
+  projectionFov: '360° FOV',
+  projectionDistance: '360° Distance',
+  projectionDistortion: '360° Distortion',
+  projectionYaw: '360° Yaw',
+  projectionPitch: '360° Pitch',
+  projectionRoll: '360° Roll',
+  projectionHorizonOffset: '360° Horizon Offset',
 }
 
 const BUILT_IN_ANIMATABLE_PROPERTIES = new Set<BuiltInAnimatableProperty>(

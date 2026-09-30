@@ -496,6 +496,45 @@ export function renderSubtitleSegmentItem(
   const parsed = parseSubtitleCueText(activeCue.text)
   if (parsed.isEmpty) return
 
+  let dynamicSpans = parsed.spans
+  let plainText = parsed.plainText
+  const captionAnimationStyle = item.captionAnimationStyle
+  if (
+    captionAnimationStyle &&
+    captionAnimationStyle !== 'none' &&
+    activeCue.words &&
+    activeCue.words.length > 0
+  ) {
+    const activeWordIndex = activeCue.words.findIndex(
+      (w) => secondsIntoSegment >= w.start && secondsIntoSegment <= w.end,
+    )
+    const highlightColor = item.captionHighlightColor ?? '#facc15'
+    dynamicSpans = activeCue.words.map((w, idx) => {
+      const isActive = idx === activeWordIndex
+      const isPast = idx < activeWordIndex
+      if (captionAnimationStyle === 'hormozi') {
+        return {
+          text: w.word + ' ',
+          color: isActive ? highlightColor : '#ffffff',
+          fontWeight: (isActive ? 'bold' : item.fontWeight ?? 'semibold') as any,
+        }
+      } else if (captionAnimationStyle === 'mrbeast') {
+        return {
+          text: w.word + ' ',
+          color: isActive ? highlightColor : '#ffffff',
+          fontWeight: 'black' as any,
+        }
+      } else if (captionAnimationStyle === 'karaoke') {
+        return {
+          text: w.word + ' ',
+          color: isActive || isPast ? highlightColor : '#a1a1aa',
+        }
+      }
+      return { text: w.word + ' ' }
+    })
+    plainText = activeCue.words.map((w) => w.word).join(' ')
+  }
+
   const ephemeralText: TextItem = {
     id: item.id,
     type: 'text',
@@ -504,8 +543,9 @@ export function renderSubtitleSegmentItem(
     durationInFrames: item.durationInFrames,
     label: item.label,
     mediaId: item.mediaId,
-    text: parsed.plainText,
-    textSpans: parsed.spans,
+    text: plainText,
+    textSpans: dynamicSpans,
+    spanLayout: dynamicSpans && dynamicSpans !== parsed.spans ? 'inline' : undefined,
     fontSize: item.fontSize,
     fontFamily: item.fontFamily,
     fontWeight: item.fontWeight,

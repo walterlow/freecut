@@ -133,6 +133,19 @@ vi.mock('@/components/ui/select', () => ({
 vi.mock('lucide-react', () => ({
   Loader2: () => <span aria-hidden="true">loader</span>,
   Square: () => <span aria-hidden="true">square</span>,
+  Cpu: () => <span aria-hidden="true">cpu</span>,
+  Zap: () => <span aria-hidden="true">zap</span>,
+  Captions: () => <span aria-hidden="true">captions</span>,
+  Server: () => <span aria-hidden="true">server</span>,
+  Cloud: () => <span aria-hidden="true">cloud</span>,
+  RefreshCw: () => <span aria-hidden="true">refresh</span>,
+  Sparkles: () => <span aria-hidden="true">sparkles</span>,
+  Key: () => <span aria-hidden="true">key</span>,
+  CheckCircle2: () => <span aria-hidden="true">check</span>,
+  AlertCircle: () => <span aria-hidden="true">alert</span>,
+  ExternalLink: () => <span aria-hidden="true">external-link</span>,
+  FileText: () => <span aria-hidden="true">file-text</span>,
+  Trash2: () => <span aria-hidden="true">trash</span>,
 }))
 
 vi.mock('@/components/ui/dialog', async () => {
@@ -338,5 +351,121 @@ describe('TranscribeDialog', () => {
     expect(screen.queryByLabelText('Language')).not.toBeInTheDocument()
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'whisper-large' } })
     expect(screen.getByLabelText('Language')).toHaveValue('auto')
+  })
+
+  it('allows selecting Whisper Local GPU and selecting model', () => {
+    const onStart = vi.fn()
+    render(
+      <TranscribeDialog
+        open
+        onOpenChange={vi.fn()}
+        fileName="clip.mp4"
+        hasTranscript={false}
+        isRunning={false}
+        progressPercent={null}
+        progressLabel="Idle"
+        onStart={onStart}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Whisper GPU'))
+    expect(screen.getByText(/Ciclo de vida On-Demand/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(onStart).toHaveBeenCalledWith({
+      model: 'whisper-local:turbo',
+      quantization: 'hybrid',
+      language: '',
+    })
+  })
+
+  it('allows selecting ComfyUI for transcription', () => {
+    const onStart = vi.fn()
+    render(
+      <TranscribeDialog
+        open
+        onOpenChange={vi.fn()}
+        fileName="clip.mp4"
+        hasTranscript={false}
+        isRunning={false}
+        progressPercent={null}
+        progressLabel="Idle"
+        onStart={onStart}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('ComfyUI'))
+    expect(screen.getByText(/Workflow activo/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(onStart).toHaveBeenCalledWith({
+      model: 'comfyui:transcription',
+      quantization: 'hybrid',
+      language: '',
+    })
+  })
+
+  it('allows selecting Cloud provider and entering custom model', () => {
+    const onStart = vi.fn()
+    render(
+      <TranscribeDialog
+        open
+        onOpenChange={vi.fn()}
+        fileName="clip.mp4"
+        hasTranscript={false}
+        isRunning={false}
+        progressPercent={null}
+        progressLabel="Idle"
+        onStart={onStart}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Cloud'))
+    expect(screen.getByText('Groq (Whisper)')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'OpenAI' }))
+    const customInput = screen.getByLabelText(/O escribe cualquier modelo/i)
+    fireEvent.change(customInput, { target: { value: 'custom-whisper' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(onStart).toHaveBeenCalledWith({
+      model: 'openai:custom-whisper',
+      quantization: 'hybrid',
+      language: '',
+    })
+  })
+
+  it('renders retranscribe button and allows deleting existing transcript', async () => {
+    const onStart = vi.fn()
+    const onDelete = vi.fn()
+    const onOpenChange = vi.fn()
+
+    render(
+      <TranscribeDialog
+        open
+        onOpenChange={onOpenChange}
+        fileName="clip.mp4"
+        hasTranscript={true}
+        isRunning={false}
+        progressPercent={null}
+        progressLabel="Idle"
+        onStart={onStart}
+        onCancel={vi.fn()}
+        onDelete={onDelete}
+      />,
+    )
+
+    expect(screen.getByText(/Este medio ya tiene una transcripción/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Volver a transcribir/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Limpiar transcripción/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Limpiar transcripción/i }))
+    expect(onDelete).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
   })
 })

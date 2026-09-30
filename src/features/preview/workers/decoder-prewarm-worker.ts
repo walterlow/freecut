@@ -563,7 +563,10 @@ async function batchPreseek(
       let i = 0
       try {
         for await (const sample of iterator) {
-          if (!shouldContinue()) break
+          if (!shouldContinue()) {
+            sample?.close?.()
+            break
+          }
           const timestamp = timestamps[i]
           i++
 

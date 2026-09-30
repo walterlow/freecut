@@ -1,7 +1,7 @@
 import { useCallback, useMemo, memo, useRef, useState, useEffect, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import { Sparkles, Plus, Eye, EyeOff, Search, X } from 'lucide-react'
+import { Sparkles, Plus, Eye, EyeOff, Search, X, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { TimelineItem } from '@/types/timeline'
 import type { ItemEffect, GpuEffect, VisualEffect } from '@/types/effects'
@@ -13,6 +13,8 @@ import {
   useSpatialEffectEditorStore,
   useThrottledFrame,
 } from '@/features/effects/deps/preview-contract'
+import { usePlaybackStore } from '@/shared/state/playback'
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge'
 import { PropertySection } from '@/shared/ui/property-controls'
 import {
   GpuEffectPanel,
@@ -78,6 +80,7 @@ export const EffectsSection = memo(function EffectsSection({
   const addEffects = useTimelineStore((s) => s.addEffects)
   const updateEffect = useTimelineStore((s) => s.updateEffect)
   const removeEffect = useTimelineStore((s) => s.removeEffect)
+  const clearEffects = useTimelineStore((s) => s.clearEffects)
   const toggleEffect = useTimelineStore((s) => s.toggleEffect)
   const setItemEffects = useTimelineStore((s) => s.setItemEffects)
   const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations)
@@ -500,6 +503,21 @@ export const EffectsSection = memo(function EffectsSection({
     [getMappedEffectEntry, removeEffect, visualItems],
   )
 
+  // Clear all effects
+  const handleClearAll = useCallback(() => {
+    visualItems.forEach((item) => {
+      clearEffects(item.id)
+    })
+    clearPreview()
+    const currentFrame = usePlaybackStore.getState().currentFrame
+    const { items } = useTimelineStore.getState()
+    usePreviewBridgeStore.getState().requestPostEditWarm(
+      currentFrame,
+      items.map((i) => i.id),
+    )
+    usePreviewBridgeStore.getState().setDisplayedFrame(null)
+  }, [clearEffects, clearPreview, visualItems])
+
   // Effect picker popover state
   const [pickerOpen, setPickerOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -779,6 +797,15 @@ export const EffectsSection = memo(function EffectsSection({
           {allEffectsEnabled ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
         </Button>
       )}
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        onClick={handleClearAll}
+        title={t('effects.section.clearAll', 'Limpiar todos los efectos')}
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </Button>
     </div>
   )
 

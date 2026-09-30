@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
+import { usePrefersReducedMotion } from '@/shared/hooks/use-prefers-reduced-motion'
 import { ChevronLeft, Plus, RotateCcw, Save, SlidersHorizontal, X } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -587,7 +588,7 @@ export function SegmentEasingPopover({
  * measured height, reading as a single fluid resize rather than a hard jump.
  */
 function ResizePanel({ viewKey, children }: { viewKey: string; children: ReactNode }) {
-  const reduce = useReducedMotion()
+  const reduce = usePrefersReducedMotion()
   const measureRef = useRef<HTMLDivElement>(null)
   const { height } = useElementSize(measureRef)
   const measured = height > 0

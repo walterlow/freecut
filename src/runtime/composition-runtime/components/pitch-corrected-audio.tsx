@@ -212,10 +212,13 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
     const needsInitialSyncRef = useRef<boolean>(true)
     const lastFrameRef = useRef<number>(-1)
     const preWarmTimerRef = useRef<number | null>(null)
+    const waitingForCanPlayRef = useRef<boolean>(false)
 
     useEffect(() => {
       if (playing) {
         needsInitialSyncRef.current = true
+      } else {
+        waitingForCanPlayRef.current = false
       }
     }, [playing])
 
@@ -246,6 +249,7 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
       }
 
       return () => {
+        waitingForCanPlayRef.current = false
         audioRef.current = null
         sourceNodeRef.current?.disconnect()
         sourceNodeRef.current = null
@@ -345,7 +349,9 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
         const audioBehind = drift < -0.2
         const audioFarAhead = drift > 0.5
         const needsSync =
-          needsInitialSyncRef.current || audioFarAhead || (audioBehind && timeSinceLastSync > 500)
+          needsInitialSyncRef.current ||
+          audioFarAhead ||
+          (audioBehind && timeSinceLastSync > 500 && !audio.paused)
 
         if (needsSync && canSeek) {
           try {
@@ -357,21 +363,8 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
           }
         }
 
-        if (audio.paused && audio.readyState >= 3) {
-          const seekDistance = Math.abs(drift)
-          if (seekDistance > 1 && audio.seeking) {
-            const onSeeked = () => {
-              audio.removeEventListener('seeked', onSeeked)
-              const playback = usePlaybackStore.getState()
-              if (playback.isPlaying && playback.playbackRate > 0 && audio.paused) {
-                const ctx = graphRef.current?.context
-                if (ctx?.state === 'suspended') ctx.resume()
-                audio.play().catch(() => {})
-              }
-            }
-            audio.addEventListener('seeked', onSeeked, { once: true })
-            return
-          }
+        const triggerPlay = () => {
+          if (!audio.paused) return
 
           const sharedContext = graphRef.current?.context
           if (sharedContext?.state === 'suspended') {
@@ -381,7 +374,35 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
             // Autoplay might be blocked.
           })
         }
+
+        if (audio.paused) {
+          if (audio.readyState >= 2) {
+            waitingForCanPlayRef.current = false
+            const seekDistance = Math.abs(drift)
+            if (seekDistance > 1 && audio.seeking) {
+              const onSeeked = () => {
+                audio.removeEventListener('seeked', onSeeked)
+                triggerPlay()
+              }
+              audio.addEventListener('seeked', onSeeked, { once: true })
+              return
+            }
+
+            triggerPlay()
+          } else if (!waitingForCanPlayRef.current) {
+            waitingForCanPlayRef.current = true
+            const onCanPlay = () => {
+              waitingForCanPlayRef.current = false
+              audio.removeEventListener('canplay', onCanPlay)
+              audio.removeEventListener('loadeddata', onCanPlay)
+              triggerPlay()
+            }
+            audio.addEventListener('canplay', onCanPlay, { once: true })
+            audio.addEventListener('loadeddata', onCanPlay, { once: true })
+          }
+        }
       } else {
+        waitingForCanPlayRef.current = false
         if (!audio.paused) {
           audio.pause()
         }
