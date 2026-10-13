@@ -1,6 +1,6 @@
 import { Profiler, Suspense } from 'react'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vite-plus/test'
 
 import { useTimelineContentPixelsPerSecond } from '../contexts/timeline-zoom-context'
 import { _resetZoomStoreForTest, useZoomStore } from '../stores/zoom-store'

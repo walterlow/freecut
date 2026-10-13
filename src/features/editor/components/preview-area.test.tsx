@@ -250,10 +250,7 @@ describe('PreviewArea mask editor toolbar', () => {
     expect(screen.getByTestId('video-preview')).toHaveAttribute('data-width', '1440')
     expect(screen.getByTestId('video-preview')).toHaveAttribute('data-height', '1080')
     expect(screen.getByTestId('video-preview')).toHaveAttribute('data-fps', '24')
-    expect(screen.getByTestId('video-preview')).toHaveAttribute(
-      'data-background-color',
-      '#123456',
-    )
+    expect(screen.getByTestId('video-preview')).toHaveAttribute('data-background-color', '#123456')
     expect(screen.getByTestId('playback-controls')).toHaveAttribute('data-total-frames', '240')
     expect(screen.getByTestId('timecode-display')).toHaveAttribute('data-total-frames', '240')
   })
@@ -269,9 +266,7 @@ describe('PreviewArea mask editor toolbar', () => {
   })
 
   it('preserves the program preview DOM while switching workspace chrome', () => {
-    const { rerender } = render(
-      <PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />,
-    )
+    const { rerender } = render(<PreviewArea project={{ width: 1920, height: 1080, fps: 30 }} />)
     const previewNode = screen.getByTestId('video-preview')
 
     act(() => {

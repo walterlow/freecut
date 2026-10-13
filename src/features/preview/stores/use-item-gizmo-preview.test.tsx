@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vite-plus/test'
 import { useGizmoStore } from './gizmo-store'
 import { useItemGizmoPreview } from './use-item-gizmo-preview'
 
@@ -25,9 +25,7 @@ describe('useItemGizmoPreview', () => {
     })
 
     act(() => {
-      useGizmoStore
-        .getState()
-        .startTranslate('polygon', { x: 0, y: 0 }, transform, 0, 'shape')
+      useGizmoStore.getState().startTranslate('polygon', { x: 0, y: 0 }, transform, 0, 'shape')
     })
     const renderCountAfterStart = renderCount
 
@@ -52,9 +50,7 @@ describe('useItemGizmoPreview', () => {
     const initialRenderCount = renderCount
 
     act(() => {
-      useGizmoStore
-        .getState()
-        .startTranslate('polygon', { x: 0, y: 0 }, transform, 0, 'shape')
+      useGizmoStore.getState().startTranslate('polygon', { x: 0, y: 0 }, transform, 0, 'shape')
       useGizmoStore.getState().updateInteraction({ x: 24, y: 12 }, false)
     })
 

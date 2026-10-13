@@ -502,15 +502,10 @@ export const VisibleFilmstripCanvas = memo(function VisibleFilmstripCanvas({
     if (liveTimelineViewport) {
       const snapshot = getLiveTimelineSnapshot()
       const timelineItem = canvas.closest<HTMLElement>('[data-timeline-item]')
-      const requiresMeasuredGeometry =
-        canvas.closest('[data-filmstrip-timeline-segment]') !== null
+      const requiresMeasuredGeometry = canvas.closest('[data-filmstrip-timeline-segment]') !== null
       const liveWindow = requiresMeasuredGeometry
         ? null
-        : computeLiveFilmstripCanvasWindowFromItem(
-            timelineItem,
-            snapshot,
-            liveViewportOverscanPx,
-          )
+        : computeLiveFilmstripCanvasWindowFromItem(timelineItem, snapshot, liveViewportOverscanPx)
       const resolvedWindow =
         liveWindow ??
         measureLiveFilmstripCanvasWindow({

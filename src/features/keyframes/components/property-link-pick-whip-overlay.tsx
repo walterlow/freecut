@@ -17,7 +17,5 @@ interface PropertyLinkDragState {
 }
 
 export function PropertyLinkPickWhipOverlay({ drag }: { drag: PropertyLinkDragState }) {
-  return (
-    <PickWhipOverlay presentation={drag.presentation} testId="property-link-pick-whip" />
-  )
+  return <PickWhipOverlay presentation={drag.presentation} testId="property-link-pick-whip" />
 }

@@ -190,8 +190,7 @@ fn motionBlurFragment(input: VertexOutput) -> @location(0) vec4f {
       (p.angle as number) ?? 0,
       // Existing effect instances have legacy params but no shutterAngle;
       // a truly empty params object is the registry's "use defaults" probe.
-      (p.shutterAngle as number | undefined) ??
-        (Object.keys(p).length > 0 ? 360 : 180),
+      (p.shutterAngle as number | undefined) ?? (Object.keys(p).length > 0 ? 360 : 180),
       (p.samples as number) ?? 16,
       0.2,
       0,

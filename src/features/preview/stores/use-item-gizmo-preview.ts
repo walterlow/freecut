@@ -10,10 +10,7 @@ interface ItemGizmoPreviewOptions {
   imperativeTranslate?: boolean
 }
 
-export function useItemGizmoPreview(
-  itemId: string,
-  options: ItemGizmoPreviewOptions = {},
-) {
+export function useItemGizmoPreview(itemId: string, options: ItemGizmoPreviewOptions = {}) {
   const activeGizmoMode = useGizmoStore((state) =>
     state.activeGizmo?.itemId === itemId ? state.activeGizmo.mode : null,
   )
@@ -25,8 +22,7 @@ export function useItemGizmoPreview(
     return state.previewTransform
   })
   const itemPreview = useGizmoStore(useCallback((state) => state.preview?.[itemId], [itemId]))
-  const activeGizmo =
-    activeGizmoMode === null ? null : { itemId, mode: activeGizmoMode }
+  const activeGizmo = activeGizmoMode === null ? null : { itemId, mode: activeGizmoMode }
 
   return { activeGizmo, previewTransform, itemPreview }
 }

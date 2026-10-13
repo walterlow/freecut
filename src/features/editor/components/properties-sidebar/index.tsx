@@ -303,16 +303,11 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
                 </Button>
                 <Settings2 className="w-3 h-3 shrink-0 text-muted-foreground" />
                 <h2 className="min-w-0 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                  <span className="shrink-0 uppercase tracking-wide">
-                    {headerLabel}
-                  </span>
+                  <span className="shrink-0 uppercase tracking-wide">{headerLabel}</span>
                   {headerContext && (
                     <>
                       <span className="shrink-0">-</span>
-                      <span
-                        className="truncate normal-case tracking-normal"
-                        title={headerTitle}
-                      >
+                      <span className="truncate normal-case tracking-normal" title={headerTitle}>
                         {headerContext}
                       </span>
                     </>

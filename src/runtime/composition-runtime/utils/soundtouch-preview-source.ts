@@ -122,10 +122,7 @@ export class QueuedStereoBufferSource {
       }
 
       const chunkOffset = cursorFrame - chunk.startFrame
-      const framesToCopy = Math.min(
-        requestedFrames - copiedFrames,
-        chunkOffset + 1,
-      )
+      const framesToCopy = Math.min(requestedFrames - copiedFrames, chunkOffset + 1)
       for (let i = 0; i < framesToCopy; i += 1) {
         const sourceIndex = chunkOffset - i
         target[outIndex++] = chunk.leftChannel[sourceIndex] ?? 0

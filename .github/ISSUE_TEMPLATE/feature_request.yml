@@ -1,6 +1,6 @@
 name: Feature Request
 description: Suggest an improvement or a new capability for FreeCut.
-title: "[Feature]: "
+title: '[Feature]: '
 body:
   - type: markdown
     attributes:

@@ -338,7 +338,10 @@ describe('zoom-store interaction split', () => {
         return id
       }),
     )
-    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => animationFrames.delete(id)))
+    vi.stubGlobal(
+      'cancelAnimationFrame',
+      vi.fn((id: number) => animationFrames.delete(id)),
+    )
     vi.stubGlobal(
       'requestIdleCallback',
       vi.fn((callback: IdleRequestCallback) => {
@@ -347,7 +350,10 @@ describe('zoom-store interaction split', () => {
         return id
       }),
     )
-    vi.stubGlobal('cancelIdleCallback', vi.fn((id: number) => idleCallbacks.delete(id)))
+    vi.stubGlobal(
+      'cancelIdleCallback',
+      vi.fn((id: number) => idleCallbacks.delete(id)),
+    )
     usePlaybackStore.setState({ isPlaying: true })
 
     useZoomStore.getState().setZoomLevelImmediate(1.6)

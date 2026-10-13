@@ -106,18 +106,18 @@ function isInvalidTransformParentUpdate(
   if (!child || !canParticipateInTransformHierarchy(child)) return true
   return Boolean(
     context.parentItemId &&
-      (wouldCreateTransformParentCycle(
-          childItemId,
-          context.parentItemId,
-          context.getItem,
-          context.getKeyframes,
-        ) ||
-        hasRedundantTransformParentLink(
-          childItemId,
-          context.parentItemId,
-          context.getItem,
-          context.getKeyframes,
-        )),
+    (wouldCreateTransformParentCycle(
+      childItemId,
+      context.parentItemId,
+      context.getItem,
+      context.getKeyframes,
+    ) ||
+      hasRedundantTransformParentLink(
+        childItemId,
+        context.parentItemId,
+        context.getItem,
+        context.getKeyframes,
+      )),
   )
 }
 

@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import { RIFE_MAX_RENDER_PIXELS, clampRenderSize } from './rife-interpolator'
 
 describe('clampRenderSize', () => {

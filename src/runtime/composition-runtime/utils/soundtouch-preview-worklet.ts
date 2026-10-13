@@ -90,7 +90,10 @@ async function prepareSoundTouchPreviewSource(
     }
 
     if (typeof OfflineAudioContext !== 'undefined') {
-      const targetFrames = Math.max(1, Math.ceil(buffer.length * (safeTargetRate / buffer.sampleRate)))
+      const targetFrames = Math.max(
+        1,
+        Math.ceil(buffer.length * (safeTargetRate / buffer.sampleRate)),
+      )
       const context = new OfflineAudioContext(
         Math.max(1, Math.min(2, buffer.numberOfChannels)),
         targetFrames,

@@ -32,14 +32,14 @@ real complexity lives in `renderFrame`'s branching, which this plan targets.
 `renderFrame` defines **six nested functions, re-created on every call**, each
 capturing a mix of two scopes:
 
-| Nested helper (approx. region) | Captures (per-frame) | Captures (renderer-scope) |
-|---|---|---|
-| `hasGpuEffectsForItem` | — | `renderMode`, `getPreviewEffectsOverride` |
-| `renderItemWithEffects` (largest) | `frame`, `activeMasks`, `contentCtx`, `useGpuCompositor` | `gpu`, `itemRenderContext`, `canvasPool`, `renderMode`, overrides, caches |
-| `renderMasksToGpuTexture` | `activeMasks` | `gpu`, `canvasSettings`, `maskSettings` |
-| `renderTransitionFallbackCanvas` | `frame`, `activeMasks` | `itemRenderContext`, `canvasPool` |
-| `applyTrackScopedMasks` | `activeMasks` | `canvasPool`, `maskSettings` |
-| `renderTask` | `frame`, `contentCtx`, `useGpuCompositor`, `occlusionCutoffOrder`, `renderTasks` | `gpu`, `itemRenderContext` |
+| Nested helper (approx. region)    | Captures (per-frame)                                                             | Captures (renderer-scope)                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `hasGpuEffectsForItem`            | —                                                                                | `renderMode`, `getPreviewEffectsOverride`                                 |
+| `renderItemWithEffects` (largest) | `frame`, `activeMasks`, `contentCtx`, `useGpuCompositor`                         | `gpu`, `itemRenderContext`, `canvasPool`, `renderMode`, overrides, caches |
+| `renderMasksToGpuTexture`         | `activeMasks`                                                                    | `gpu`, `canvasSettings`, `maskSettings`                                   |
+| `renderTransitionFallbackCanvas`  | `frame`, `activeMasks`                                                           | `itemRenderContext`, `canvasPool`                                         |
+| `applyTrackScopedMasks`           | `activeMasks`                                                                    | `canvasPool`, `maskSettings`                                              |
+| `renderTask`                      | `frame`, `contentCtx`, `useGpuCompositor`, `occlusionCutoffOrder`, `renderTasks` | `gpu`, `itemRenderContext`                                                |
 
 The **per-frame** values (`frame`, `activeMasks`, `contentCtx`, `useGpuCompositor`,
 `occlusionCutoffOrder`, `renderTasks`, transition state) are why these can't simply
@@ -90,7 +90,9 @@ Each phase is a separate commit that compiles, passes lint + the existing export
 suite, and is followed by the **manual render check (§5)**. Stop at any phase.
 
 ### Phase A — extract the leaf pure/near-pure helpers first (lowest risk)
+
 These have the fewest captures and no cross-item state:
+
 1. `hasGpuEffectsForItem` → pure `(item, getPreviewEffectsOverride?)` helper (it's a
    thin wrapper over `itemHasEnabledGpuEffect`; may not even need its own file).
 2. `applyTrackScopedMasks` → `(result, trackOrder, skipMasks, { activeMasks,
@@ -102,6 +104,7 @@ Each is unit-testable with mocked deps (mirror `frame-occlusion.test.ts`). Land
 them one commit at a time.
 
 ### Phase B — introduce `FrameRenderDeps` + the `FrameRenderPass` shell
+
 4. Define `FrameRenderDeps` and assemble it **once** in `createCompositionRenderer`
    (after `itemRenderContext` is built). No behavior change yet — just the struct.
 5. Create `FrameRenderPass` with `run()` containing a **verbatim copy** of the
@@ -112,6 +115,7 @@ them one commit at a time.
    original body line-by-line before running.
 
 ### Phase C — convert nested helpers to methods
+
 6. One at a time, lift `renderTransitionFallbackCanvas`, `renderTask`, and finally
    `renderItemWithEffects` (largest, do last) from closures inside `run()` to
    private methods, moving their per-frame captures to `this.*` fields set at the
@@ -119,6 +123,7 @@ them one commit at a time.
    especially, since it drives the per-item effects/mask/blend path.
 
 ### Phase D — split `run()` into named phases
+
 7. With state on `this`, carve `run()` into private phases that read/write `this.*`:
    `resolveFrameScene()` (masks + frameScene + transition state), `detectGpuNeeds()`,
    `wirePipelines()` (the `itemRenderContext.gpu* = gpu.*` assignments),

@@ -331,8 +331,7 @@ describe('resolveAnimatedTransform', () => {
         canvas: { width: 1920, height: 1080, fps: 30 },
         getItem: (itemId) => items.get(itemId),
         getKeyframes: (itemId) => (itemId === target.id ? targetKeyframes : undefined),
-        getPreviewTransform: (itemId) =>
-          itemId === source.id ? { x: 120, y: 180 } : undefined,
+        getPreviewTransform: (itemId) => (itemId === source.id ? { x: 120, y: 180 } : undefined),
       },
     )
 
@@ -366,10 +365,8 @@ describe('resolveAnimatedTransform', () => {
         globalFrame: 0,
         canvas: { width: 1920, height: 1080, fps: 30 },
         getItem: (itemId) => items.get(itemId),
-        getKeyframes: (itemId) =>
-          itemId === target.id ? offsetTargetKeyframes : undefined,
-        getPreviewTransform: (itemId) =>
-          itemId === source.id ? { x: 120, y: 180 } : undefined,
+        getKeyframes: (itemId) => (itemId === target.id ? offsetTargetKeyframes : undefined),
+        getPreviewTransform: (itemId) => (itemId === source.id ? { x: 120, y: 180 } : undefined),
       },
     )
 

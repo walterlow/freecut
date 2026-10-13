@@ -19,10 +19,7 @@ const PATH_VERTEX_COMPONENTS: readonly PathVertexAnimatableComponent[] = [
   'outY',
 ]
 
-function getComponentValue(
-  vertex: MaskVertex,
-  component: PathVertexAnimatableComponent,
-): number {
+function getComponentValue(vertex: MaskVertex, component: PathVertexAnimatableComponent): number {
   switch (component) {
     case 'positionX':
       return vertex.position[0]

@@ -107,15 +107,7 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
         Math.round((audioBuffer.duration - sourceEndSeconds) * effectiveSourceFps),
       ),
     }
-  }, [
-    audioBuffer,
-    isComplete,
-    isReversed,
-    reverseSourceEnd,
-    sourceFps,
-    timelineFps,
-    trimBefore,
-  ])
+  }, [audioBuffer, isComplete, isReversed, reverseSourceEnd, sourceFps, timelineFps, trimBefore])
   const fallbackBuffer = reversedPlayback?.buffer ?? audioBuffer
 
   useEffect(() => {

@@ -465,10 +465,12 @@ describe('keyframe actions', () => {
 
   describe('removal', () => {
     it('trims parked keyframes with a boundary value in one undoable action', () => {
-      useItemsStore.getState().setItems([
-        makeTimelineVideoItem({ id: 'a', durationInFrames: 11 }),
-        makeTimelineVideoItem({ id: 'b', from: 60 }),
-      ])
+      useItemsStore
+        .getState()
+        .setItems([
+          makeTimelineVideoItem({ id: 'a', durationInFrames: 11 }),
+          makeTimelineVideoItem({ id: 'b', from: 60 }),
+        ])
       useKeyframesStore.getState().setKeyframes([
         {
           itemId: 'a',

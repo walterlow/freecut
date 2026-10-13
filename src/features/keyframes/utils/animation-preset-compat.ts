@@ -82,7 +82,8 @@ export function captureAnimationFromItem(
   const motionLayers = (item.motionLayers ?? [])
     .filter((layer) => layer.enabled && layer.tracks.length > 0)
     .map((layer) => cloneMotionAnimationLayer(layer))
-  const textMotion = item.type === 'text' && item.textMotion ? cloneTextMotion(item.textMotion) : undefined
+  const textMotion =
+    item.type === 'text' && item.textMotion ? cloneTextMotion(item.textMotion) : undefined
   if (
     animated.length === 0 &&
     animatedVectors.length === 0 &&
@@ -95,9 +96,7 @@ export function captureAnimationFromItem(
 
   const animatedFrames = [
     ...animated.flatMap((property) => property.keyframes.map((keyframe) => keyframe.frame)),
-    ...animatedVectors.flatMap((property) =>
-      property.keyframes.map((keyframe) => keyframe.frame),
-    ),
+    ...animatedVectors.flatMap((property) => property.keyframes.map((keyframe) => keyframe.frame)),
   ]
   const minFrame = animatedFrames.length > 0 ? Math.min(...animatedFrames) : 0
 

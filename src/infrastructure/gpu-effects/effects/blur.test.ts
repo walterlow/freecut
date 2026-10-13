@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import { motionBlur } from './blur'
 
 describe('shutter motion blur', () => {
@@ -14,11 +14,7 @@ describe('shutter motion blur', () => {
 
   it('preserves legacy blur radius while new effects use a 180 degree shutter', () => {
     const legacy = Array.from(
-      motionBlur.packUniforms(
-        { amount: 0.05, angle: 1, samples: 24 },
-        1920,
-        1080,
-      )!,
+      motionBlur.packUniforms({ amount: 0.05, angle: 1, samples: 24 }, 1920, 1080)!,
     )
     const shutter = Array.from(
       motionBlur.packUniforms(

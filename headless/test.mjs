@@ -456,9 +456,9 @@ async function main() {
       'textLayout line has positive width within the box',
       Boolean(
         tl &&
-          tl.lines.every(
-            (line) => line.width > 0 && line.inkWidth > 0 && line.width <= tl.box.width + 0.5,
-          ),
+        tl.lines.every(
+          (line) => line.width > 0 && line.inkWidth > 0 && line.width <= tl.box.width + 0.5,
+        ),
       ),
       tl ? JSON.stringify(tl.lines.map((line) => line.width)) : 'missing',
     )
@@ -466,7 +466,9 @@ async function main() {
       'textLayout baseline sits inside the box',
       Boolean(
         tl &&
-          tl.lines.every((line) => line.baseline > tl.box.y && line.baseline <= tl.box.y + tl.box.height),
+        tl.lines.every(
+          (line) => line.baseline > tl.box.y && line.baseline <= tl.box.y + tl.box.height,
+        ),
       ),
     )
 
@@ -500,11 +502,13 @@ async function main() {
       'span runs advance left-to-right with positive widths',
       Boolean(
         spanRuns &&
-          spanRuns.every((run) => run.width > 0) &&
-          spanRuns[1].x > spanRuns[0].x &&
-          spanRuns[2].x > spanRuns[1].x,
+        spanRuns.every((run) => run.width > 0) &&
+        spanRuns[1].x > spanRuns[0].x &&
+        spanRuns[2].x > spanRuns[1].x,
       ),
-      spanRuns ? JSON.stringify(spanRuns.map((run) => [Math.round(run.x), Math.round(run.width)])) : 'missing',
+      spanRuns
+        ? JSON.stringify(spanRuns.map((run) => [Math.round(run.x), Math.round(run.width)]))
+        : 'missing',
     )
 
     // --strict must fail BEFORE rendering on silent-failure findings.

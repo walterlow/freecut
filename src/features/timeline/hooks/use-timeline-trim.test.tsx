@@ -333,13 +333,7 @@ describe('useTimelineTrim', () => {
         .setItems([text, alignedVideo, alignedAudio, earlierVideo, earlierAudio])
       useSelectionStore
         .getState()
-        .selectItems([
-          'text-1',
-          'video-aligned',
-          'audio-aligned',
-          'video-earlier',
-          'audio-earlier',
-        ])
+        .selectItems(['text-1', 'video-aligned', 'audio-aligned', 'video-earlier', 'audio-earlier'])
       const { result } = renderTrimHook(text)
 
       startTrim(result, 'end')
@@ -400,13 +394,7 @@ describe('useTimelineTrim', () => {
         .setItems([text, alignedVideo, alignedAudio, earlierVideo, earlierAudio])
       useSelectionStore
         .getState()
-        .selectItems([
-          'text-1',
-          'video-aligned',
-          'audio-aligned',
-          'video-earlier',
-          'audio-earlier',
-        ])
+        .selectItems(['text-1', 'video-aligned', 'audio-aligned', 'video-earlier', 'audio-earlier'])
       const { result } = renderTrimHook(text)
 
       startTrim(result, 'start')
@@ -477,19 +465,17 @@ describe('useTimelineTrim', () => {
       }
       const video = makeTimelineVideoItem({ id: 'video-1', linkedGroupId: 'lg-1' })
       const audio = makeTimelineAudioItem({ id: 'audio-1', linkedGroupId: 'lg-1' })
-      useItemsStore
-        .getState()
-        .setTracks([
-          makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
-          makeTimelineTrack({ id: 'track-v2', name: 'V2', kind: 'video', order: 1 }),
-          makeTimelineTrack({
-            id: 'track-a1',
-            name: 'A1',
-            kind: 'audio',
-            order: 2,
-            locked: true,
-          }),
-        ])
+      useItemsStore.getState().setTracks([
+        makeTimelineTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+        makeTimelineTrack({ id: 'track-v2', name: 'V2', kind: 'video', order: 1 }),
+        makeTimelineTrack({
+          id: 'track-a1',
+          name: 'A1',
+          kind: 'audio',
+          order: 2,
+          locked: true,
+        }),
+      ])
       useItemsStore.getState().setItems([text, video, audio])
       useSelectionStore.getState().selectItems(['text-1', 'video-1', 'audio-1'])
       const { result } = renderTrimHook(text)

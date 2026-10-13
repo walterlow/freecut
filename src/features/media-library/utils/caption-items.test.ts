@@ -881,12 +881,7 @@ describe('caption-items', () => {
       items: [attachedText, attachedSubtitle, title],
     }
 
-    const tracks = appendVirtualTranscriptCaptionTrack(
-      [videoTrack, captionTrack],
-      30,
-      1920,
-      1080,
-    )
+    const tracks = appendVirtualTranscriptCaptionTrack([videoTrack, captionTrack], 30, 1920, 1080)
 
     expect(tracks).toHaveLength(2)
     expect(tracks.find((track) => track.id === 'track-captions')?.items).toEqual([title])

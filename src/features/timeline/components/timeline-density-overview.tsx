@@ -80,10 +80,7 @@ export const TimelineDensityOverview = memo(function TimelineDensityOverview({
   const itemIds = useMemo(() => items.map((item) => item.id), [items])
   const previewUpdates = useLinkedEditPreviewStore(
     useShallow(
-      useCallback(
-        (state) => itemIds.map((itemId) => state.updatesById[itemId] ?? null),
-        [itemIds],
-      ),
+      useCallback((state) => itemIds.map((itemId) => state.updatesById[itemId] ?? null), [itemIds]),
     ),
   )
   const previewItems = useMemo(
@@ -97,11 +94,7 @@ export const TimelineDensityOverview = memo(function TimelineDensityOverview({
     [items, previewUpdates],
   )
   const buckets = useMemo(
-    () =>
-      buildTimelineDensityBuckets(
-        previewItems,
-        DENSE_TIMELINE_MAX_OVERVIEW_BUCKETS_PER_TRACK,
-      ),
+    () => buildTimelineDensityBuckets(previewItems, DENSE_TIMELINE_MAX_OVERVIEW_BUCKETS_PER_TRACK),
     [previewItems],
   )
 
@@ -171,7 +164,9 @@ export const TimelineDensityOverview = memo(function TimelineDensityOverview({
                 : [item.id]
               if (event.metaKey || event.ctrlKey) {
                 const targetSet = new Set(targetIds)
-                const alreadySelected = targetIds.some((id) => selection.selectedItemIds.includes(id))
+                const alreadySelected = targetIds.some((id) =>
+                  selection.selectedItemIds.includes(id),
+                )
                 flushSync(() =>
                   selection.selectItems(
                     alreadySelected

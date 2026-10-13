@@ -189,7 +189,9 @@ function unsupportedPresentationFinding(
       `Transition "${transition.id}" uses presentation "${transition.presentation}", which has no ` +
       `${gpuAvailable ? '' : 'Canvas2D '}implementation here — it renders as a HARD CUT, not a transition` +
       (gpuAvailable ? '' : '. Presets drawable without a GPU: ') +
-      (gpuAvailable ? '' : [...CANVAS_FALLBACK_PRESENTATIONS].filter((p) => p !== 'none').join(', ')),
+      (gpuAvailable
+        ? ''
+        : [...CANVAS_FALLBACK_PRESENTATIONS].filter((p) => p !== 'none').join(', ')),
   }
 }
 

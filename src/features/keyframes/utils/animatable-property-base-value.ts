@@ -14,7 +14,9 @@ import {
   isPathVertexAnimatableProperty,
 } from './path-animatable-properties'
 
-function isCropAnimatableProperty(property: AnimatableProperty): property is CropAnimatableProperty {
+function isCropAnimatableProperty(
+  property: AnimatableProperty,
+): property is CropAnimatableProperty {
   return (
     property === 'cropLeft' ||
     property === 'cropRight' ||

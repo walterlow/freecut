@@ -630,7 +630,12 @@ function resolveCompositionWrapper(
     wrapperSourceEnd:
       compositionItem.sourceEnd ??
       sourceOffset +
-        timelineToSourceFrames(compositionItem.durationInFrames, wrapperSpeed, fps, wrapperSourceFps),
+        timelineToSourceFrames(
+          compositionItem.durationInFrames,
+          wrapperSpeed,
+          fps,
+          wrapperSourceFps,
+        ),
   }
 }
 
@@ -665,9 +670,11 @@ function mapNestedItemWindow(
   if (overlapEnd <= overlapStart) return null
 
   const effectiveStart =
-    compFrom + sourceToTimelineFrames(overlapStart - sourceOffset, wrapperSpeed, wrapperSourceFps, fps)
+    compFrom +
+    sourceToTimelineFrames(overlapStart - sourceOffset, wrapperSpeed, wrapperSourceFps, fps)
   const effectiveEnd =
-    compFrom + sourceToTimelineFrames(overlapEnd - sourceOffset, wrapperSpeed, wrapperSourceFps, fps)
+    compFrom +
+    sourceToTimelineFrames(overlapEnd - sourceOffset, wrapperSpeed, wrapperSourceFps, fps)
   const effectiveDuration = Math.max(1, effectiveEnd - effectiveStart)
 
   const baseSourceStart = subItem.sourceStart ?? subItem.trimStart ?? 0

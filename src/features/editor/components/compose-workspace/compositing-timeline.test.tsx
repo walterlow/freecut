@@ -77,12 +77,10 @@ function openTransformOptions(): void {
 
 function mockAnimationFrames() {
   const callbacks: FrameRequestCallback[] = []
-  const requestSpy = vi
-    .spyOn(window, 'requestAnimationFrame')
-    .mockImplementation((callback) => {
-      callbacks.push(callback)
-      return callbacks.length
-    })
+  const requestSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    callbacks.push(callback)
+    return callbacks.length
+  })
   const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
   return {
     flush: () => {
@@ -174,16 +172,13 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     expect(screen.getAllByText('Hero rectangle')).toHaveLength(2)
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand layer properties' }))
-    const embeddedEditor = within(
-      screen.getByTestId(`motion-layer-row-${shape.id}`),
-    ).getByTestId('dopesheet-editor-root')
+    const embeddedEditor = within(screen.getByTestId(`motion-layer-row-${shape.id}`)).getByTestId(
+      'dopesheet-editor-root',
+    )
     expect(embeddedEditor).toHaveStyle({ width: '100%' })
     expect(embeddedEditor).toHaveAttribute('data-motion-shared-grid-divisions', '10')
-    const embeddedGrid =
-      embeddedEditor.querySelector<HTMLElement>('[data-motion-grid-frames]')
-    const embeddedGridFrames = (embeddedGrid?.dataset.motionGridFrames ?? '')
-      .split(',')
-      .map(Number)
+    const embeddedGrid = embeddedEditor.querySelector<HTMLElement>('[data-motion-grid-frames]')
+    const embeddedGridFrames = (embeddedGrid?.dataset.motionGridFrames ?? '').split(',').map(Number)
     expect(embeddedGridFrames).toHaveLength(11)
     expect(embeddedGridFrames[0]).toBe(0)
     expect(embeddedGridFrames.at(-1)).toBe(120)
@@ -273,9 +268,7 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     expect(firstShellObserver).toBeDefined()
     act(() => {
       firstShellObserver?.callback(
-        [
-          { isIntersecting: true, target: firstShell } as unknown as IntersectionObserverEntry,
-        ],
+        [{ isIntersecting: true, target: firstShell } as unknown as IntersectionObserverEntry],
         firstShellObserver.observer,
       )
     })
@@ -328,9 +321,7 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     collapsedPropertyControl.focus()
     act(() => {
       firstShellObserver?.callback(
-        [
-          { isIntersecting: false, target: firstShell } as unknown as IntersectionObserverEntry,
-        ],
+        [{ isIntersecting: false, target: firstShell } as unknown as IntersectionObserverEntry],
         firstShellObserver.observer,
       )
     })
@@ -1047,7 +1038,9 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     expect(scrollArea.scrollTop).toBe(40)
     expect(frameCallbacks).toHaveLength(1)
     act(() => frameCallbacks.shift()?.(performance.now()))
-    expect(Number(screen.getByTestId('motion-time-navigator').dataset.startFrame)).toBeGreaterThan(8)
+    expect(Number(screen.getByTestId('motion-time-navigator').dataset.startFrame)).toBeGreaterThan(
+      8,
+    )
     expect(scrollArea).toHaveClass('overflow-y-auto')
     animationFrameSpy.mockRestore()
   })
@@ -1349,7 +1342,9 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     act(() => frameCallbacks.shift()?.(performance.now()))
     expect(Number(navigator.dataset.startFrame)).toBeGreaterThan(14)
     expect(Number(navigator.dataset.startFrame)).toBeLessThan(15)
-    expect(Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)).toBeCloseTo(96)
+    expect(Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)).toBeCloseTo(
+      96,
+    )
     animationFrameSpy.mockRestore()
   })
 
@@ -1526,10 +1521,7 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     expect(previewSegmentLeft).toBeCloseTo((-Number(previewStart) / 96) * 1000, 5)
     expect(previewSegmentWidth).toBeCloseTo((shape.durationInFrames / 96) * 1000, 5)
     expect(segment).toHaveAttribute('data-from-frame', String(shape.from))
-    expect(segment).toHaveAttribute(
-      'data-to-frame',
-      String(shape.from + shape.durationInFrames),
-    )
+    expect(segment).toHaveAttribute('data-to-frame', String(shape.from + shape.durationInFrames))
 
     act(() => settleCallback?.())
     expect(navigator).toHaveAttribute('data-start-frame', previewStart)
@@ -1663,13 +1655,10 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     for (let index = 0; index < 20; index += 1) zoomIn()
     expect(frameCallbacks).toHaveLength(1)
     act(() => frameCallbacks.shift()?.(performance.now()))
-    let visibleFrames =
-      Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)
+    let visibleFrames = Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)
     let usableWidth = rectRight - 620 - KEYFRAME_EDGE_INSET * 2
     expect(visibleFrames).toBe(Math.ceil(usableWidth / KEYFRAME_DIAMOND_RENDERED_WIDTH_PX))
-    expect(usableWidth / visibleFrames).toBeLessThanOrEqual(
-      KEYFRAME_DIAMOND_RENDERED_WIDTH_PX,
-    )
+    expect(usableWidth / visibleFrames).toBeLessThanOrEqual(KEYFRAME_DIAMOND_RENDERED_WIDTH_PX)
 
     rectRight = 800
     for (let index = 0; index < 10; index += 1) zoomIn()
@@ -1677,9 +1666,7 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     visibleFrames = Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)
     usableWidth = rectRight - 620 - KEYFRAME_EDGE_INSET * 2
     expect(visibleFrames).toBe(Math.ceil(usableWidth / KEYFRAME_DIAMOND_RENDERED_WIDTH_PX))
-    expect(usableWidth / visibleFrames).toBeLessThanOrEqual(
-      KEYFRAME_DIAMOND_RENDERED_WIDTH_PX,
-    )
+    expect(usableWidth / visibleFrames).toBeLessThanOrEqual(KEYFRAME_DIAMOND_RENDERED_WIDTH_PX)
 
     rectRight = 1000
     zoomIn()
@@ -1687,9 +1674,7 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     visibleFrames = Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)
     usableWidth = rectRight - 620 - KEYFRAME_EDGE_INSET * 2
     expect(visibleFrames).toBe(Math.ceil(usableWidth / KEYFRAME_DIAMOND_RENDERED_WIDTH_PX))
-    expect(usableWidth / visibleFrames).toBeLessThanOrEqual(
-      KEYFRAME_DIAMOND_RENDERED_WIDTH_PX,
-    )
+    expect(usableWidth / visibleFrames).toBeLessThanOrEqual(KEYFRAME_DIAMOND_RENDERED_WIDTH_PX)
     animationFrameSpy.mockRestore()
   })
 
@@ -1791,12 +1776,9 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
       fireEvent.wheel(scrollArea, { ctrlKey: true, clientX: 800, deltaY: -100 })
     }
     act(() => frameCallbacks.shift()?.(performance.now()))
-    const visibleFrames =
-      Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)
+    const visibleFrames = Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)
     const usableAxisWidth = 988 - 620 - KEYFRAME_EDGE_INSET * 2
-    expect(visibleFrames).toBe(
-      Math.ceil(usableAxisWidth / KEYFRAME_DIAMOND_RENDERED_WIDTH_PX),
-    )
+    expect(visibleFrames).toBe(Math.ceil(usableAxisWidth / KEYFRAME_DIAMOND_RENDERED_WIDTH_PX))
 
     clientWidthSpy.mockRestore()
     offsetWidthSpy.mockRestore()
@@ -1853,7 +1835,9 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
 
     act(() => frameCallbacks.shift()?.(performance.now()))
     expect(Number(navigator.dataset.startFrame)).toBeGreaterThan(18)
-    expect(Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)).toBeCloseTo(96)
+    expect(Number(navigator.dataset.endFrame) - Number(navigator.dataset.startFrame)).toBeCloseTo(
+      96,
+    )
     const settledStart = navigator.dataset.startFrame
     const settledEnd = navigator.dataset.endFrame
     act(() => settleCallback?.())
@@ -2352,8 +2336,8 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     fireEvent.pointerUp(input, { pointerId: 17, clientX: 200 })
     expect(useGizmoStore.getState().preview?.[shape.id]).toBeUndefined()
     expect(
-      useKeyframesStore.getState().keyframesByItemId[shape.id]?.vectorProperties?.[0]
-        ?.keyframes[0]?.value,
+      useKeyframesStore.getState().keyframesByItemId[shape.id]?.vectorProperties?.[0]?.keyframes[0]
+        ?.value,
     ).toEqual({ x: 101, y: 80 })
 
     animationFrameSpy.mockRestore()
@@ -2989,9 +2973,7 @@ describe('CompositingTimeline', { timeout: 15_000 }, () => {
     fireEvent.click(parentSelect)
     fireEvent.click(await screen.findByRole('option', { name: /Cycle child/ }))
 
-    expect(toastError).toHaveBeenCalledWith(
-      'This parent link would create a circular dependency.',
-    )
+    expect(toastError).toHaveBeenCalledWith('This parent link would create a circular dependency.')
     expect(useItemsStore.getState().itemById[shape.id]?.transformParent).toBeUndefined()
     expect(parentSelect).toHaveTextContent('None')
     toastError.mockRestore()

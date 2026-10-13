@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@v1.21.1
         with:
           node-version: '22'
           cache: true
@@ -132,7 +132,7 @@ jobs:
 
       - name: Setup Vite+
         if: steps.gate.outputs.run == 'true'
-        uses: voidzero-dev/setup-vp@v1
+        uses: voidzero-dev/setup-vp@v1.21.1
         with:
           node-version: '22'
           cache: true

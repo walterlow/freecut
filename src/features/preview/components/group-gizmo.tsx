@@ -1,10 +1,7 @@
 import { useMemo, useCallback, useState, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import { resolveAnimatedTextItem } from '@/features/preview/deps/keyframes'
-import {
-  useKeyframesStore,
-  useTimelineSettingsStore,
-} from '@/features/preview/deps/timeline-store'
+import { useKeyframesStore, useTimelineSettingsStore } from '@/features/preview/deps/timeline-store'
 import { useResolvedPlaybackFrame } from '@/shared/state/playback/use-resolved-playback-frame'
 import type { TimelineItem } from '@/types/timeline'
 import type {
@@ -105,12 +102,11 @@ export function GroupGizmo({
     () =>
       items.map((item) =>
         item.type === 'text'
-          ? resolveAnimatedTextItem(
-              item,
-              keyframesByItemId[item.id],
-              animationFrame - item.from,
-              { width: projectSize.width, height: projectSize.height, fps },
-            )
+          ? resolveAnimatedTextItem(item, keyframesByItemId[item.id], animationFrame - item.from, {
+              width: projectSize.width,
+              height: projectSize.height,
+              fps,
+            })
           : item,
       ),
     [animationFrame, fps, items, keyframesByItemId, projectSize.height, projectSize.width],

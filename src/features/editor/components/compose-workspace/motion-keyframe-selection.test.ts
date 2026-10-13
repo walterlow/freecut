@@ -41,9 +41,7 @@ describe('motion composition keyframe selection', () => {
       { itemId: 'layer-a', property: 'x', keyframeId: 'a-1' },
       { itemId: 'layer-b', property: 'opacity', keyframeId: 'b-1' },
     ]
-    const nextLocal: KeyframeRef[] = [
-      { itemId: 'layer-b', property: 'opacity', keyframeId: 'b-2' },
-    ]
+    const nextLocal: KeyframeRef[] = [{ itemId: 'layer-b', property: 'opacity', keyframeId: 'b-2' }]
 
     expect(mergeMotionKeyframeSelection(current, 'layer-b', nextLocal, true)).toEqual([
       current[0],
@@ -84,9 +82,7 @@ describe('motion composition keyframe selection', () => {
         vectorProperties: [
           {
             property: 'position',
-            keyframes: [
-              { id: 'vector-1', frame: 12, value: { x: 10, y: 20 }, easing: 'linear' },
-            ],
+            keyframes: [{ id: 'vector-1', frame: 12, value: { x: 10, y: 20 }, easing: 'linear' }],
           },
         ],
       },
@@ -119,9 +115,7 @@ describe('motion composition keyframe selection', () => {
         vectorProperties: [
           {
             property: 'anchor',
-            keyframes: [
-              { id: 'anchor-1', frame: 8, value: { x: 50, y: 60 }, easing: 'linear' },
-            ],
+            keyframes: [{ id: 'anchor-1', frame: 8, value: { x: 50, y: 60 }, easing: 'linear' }],
           },
         ],
       },
@@ -165,9 +159,7 @@ describe('motion composition keyframe selection', () => {
       'layer-a': scalarKeyframes('layer-a', 'x', [10]),
       'layer-b': scalarKeyframes('layer-b', 'opacity', [5]),
     }
-    const selection: KeyframeRef[] = [
-      { itemId: 'layer-a', property: 'x', keyframeId: 'layer-a-0' },
-    ]
+    const selection: KeyframeRef[] = [{ itemId: 'layer-a', property: 'x', keyframeId: 'layer-a-0' }]
 
     expect(
       getMotionCompositionSnapFrames(

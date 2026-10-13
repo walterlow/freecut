@@ -30,9 +30,7 @@ describe('timeline density overview', () => {
     expect(buckets.length).toBeLessThanOrEqual(1024)
     expect(buckets.reduce((count, bucket) => count + bucket.items.length, 0)).toBe(30_000)
     expect(buckets[0]?.from).toBe(0)
-    expect(
-      buckets.at(-1)!.from + buckets.at(-1)!.durationInFrames,
-    ).toBe(60_000)
+    expect(buckets.at(-1)!.from + buckets.at(-1)!.durationInFrames).toBe(60_000)
   })
 
   it('resolves the hit item inside a compressed bucket', () => {
@@ -65,8 +63,6 @@ describe('timeline density overview', () => {
 
     expect(getTimelineCompactCohortSignal(bounds, 30, 3, false)).toBe('settled:all')
     expect(getTimelineCompactCohortSignal(bounds, 30, 2_000, false)).toBe('settled:none')
-    expect(getTimelineCompactCohortSignal(bounds, 30, 30, true)).toMatch(
-      /^interacting:mixed:/,
-    )
+    expect(getTimelineCompactCohortSignal(bounds, 30, 30, true)).toMatch(/^interacting:mixed:/)
   })
 })

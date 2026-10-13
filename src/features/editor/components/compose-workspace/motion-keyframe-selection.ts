@@ -100,9 +100,8 @@ function getStorageKeyframes(itemKeyframes: ItemKeyframes, storage: MotionSelect
   return storage.kind === 'scalar'
     ? (itemKeyframes.properties.find((property) => property.property === storage.property)
         ?.keyframes ?? [])
-    : (itemKeyframes.vectorProperties?.find(
-        (property) => property.property === storage.property,
-      )?.keyframes ?? [])
+    : (itemKeyframes.vectorProperties?.find((property) => property.property === storage.property)
+        ?.keyframes ?? [])
 }
 
 export function mergeMotionKeyframeSelection(
@@ -294,7 +293,10 @@ function getMotionRetimeScale(
   const nextEdgeFrame =
     edge === 'start'
       ? Math.max(0, Math.min(range.endFrame - 1, Math.round(requestedEdgeFrame)))
-      : Math.max(range.startFrame + 1, Math.min(maxCompositionFrame, Math.round(requestedEdgeFrame)))
+      : Math.max(
+          range.startFrame + 1,
+          Math.min(maxCompositionFrame, Math.round(requestedEdgeFrame)),
+        )
   const pivotFrame = edge === 'start' ? range.endFrame : range.startFrame
   const initialEdgeFrame = edge === 'start' ? range.startFrame : range.endFrame
   return {
@@ -382,12 +384,7 @@ export function buildMotionSelectionRetimeUpdates(
   if (!range || range.startFrame === range.endFrame) {
     return buildMotionSelectionFrameUpdates(state, 0)
   }
-  const retime = getMotionRetimeScale(
-    range,
-    edge,
-    requestedEdgeFrame,
-    compositionDurationInFrames,
-  )
+  const retime = getMotionRetimeScale(range, edge, requestedEdgeFrame, compositionDurationInFrames)
   const entriesByGroup = groupMotionSelectionEntries(state.entries)
   const nextFrameByStorageKey = buildRetimedFrameMap(
     entriesByGroup,

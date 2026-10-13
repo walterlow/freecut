@@ -83,11 +83,7 @@ export function useTransformParentPickWhip(canvas: CanvasSettings) {
   )
   const commit = useCallback(
     (origin: ParentOrigin, candidate: ParentCandidate, modifiers: MotionPickWhipModifiers) => {
-      applyParent(
-        origin.childItemId,
-        candidate.parentItemId,
-        getParentingBehavior(modifiers),
-      )
+      applyParent(origin.childItemId, candidate.parentItemId, getParentingBehavior(modifiers))
     },
     [applyParent],
   )
@@ -117,11 +113,7 @@ export function useTransformParentPickWhip(canvas: CanvasSettings) {
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault()
         if (currentParentItemId) {
-          applyParent(
-            childItemId,
-            undefined,
-            event.altKey ? 'restore-local' : 'preserve-world',
-          )
+          applyParent(childItemId, undefined, event.altKey ? 'restore-local' : 'preserve-world')
         }
         return
       }

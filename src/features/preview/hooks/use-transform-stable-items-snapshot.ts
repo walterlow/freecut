@@ -15,10 +15,7 @@ function hasOnlyTransformFieldChanged(previous: TimelineItem, next: TimelineItem
 
   // A mask's transform participates in the composition-wide mask plan rather
   // than an item-local wrapper, so it must keep taking the full snapshot path.
-  if (
-    (previous.type === 'shape' && previous.isMask) ||
-    (next.type === 'shape' && next.isMask)
-  ) {
+  if ((previous.type === 'shape' && previous.isMask) || (next.type === 'shape' && next.isMask)) {
     return false
   }
 

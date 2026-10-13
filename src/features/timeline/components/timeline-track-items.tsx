@@ -52,8 +52,7 @@ function getTimelineItemPresentation(
     item.from + item.durationInFrames > detailRange.start && item.from < detailRange.end
   const isCompactByWidth =
     allItemsCompact ||
-    (!noItemsCompact &&
-      isTimelineItemCompactAtZoom(item.durationInFrames, fps, pixelsPerSecond))
+    (!noItemsCompact && isTimelineItemCompactAtZoom(item.durationInFrames, fps, pixelsPerSecond))
   return { item, isDetailEligible, isCompactByWidth }
 }
 
@@ -113,55 +112,42 @@ export const TimelineTrackItems = memo(function TimelineTrackItems({
       [usesDensityOverview],
     ),
   )
-  const itemPresentation = useMemo(
-    () => {
-      if (usesDensityOverview) return EMPTY_ITEM_PRESENTATION
-      return trackItems.map((item) =>
-        getTimelineItemPresentation(
-          item,
-          detailRange,
-          allItemsCompact,
-          noItemsCompact,
-          fps,
-          renderPixelsPerSecond,
-        ),
+  const itemPresentation = useMemo(() => {
+    if (usesDensityOverview) return EMPTY_ITEM_PRESENTATION
+    return trackItems.map((item) =>
+      getTimelineItemPresentation(
+        item,
+        detailRange,
+        allItemsCompact,
+        noItemsCompact,
+        fps,
+        renderPixelsPerSecond,
+      ),
+    )
+  }, [
+    allItemsCompact,
+    detailRange,
+    fps,
+    noItemsCompact,
+    renderPixelsPerSecond,
+    trackItems,
+    usesDensityOverview,
+  ])
+  const eligibleDetailIds = useMemo(() => {
+    if (allItemsCompact) return EMPTY_SELECTED_ITEM_IDS
+    const detailCenter = (detailRange.start + detailRange.end) / 2
+    const candidates = getTimelineItemsForFrameRange(trackItems, detailRange)
+    return candidates
+      .filter(
+        (item) => !isTimelineItemCompactAtZoom(item.durationInFrames, fps, renderPixelsPerSecond),
       )
-    },
-    [
-      allItemsCompact,
-      detailRange,
-      fps,
-      noItemsCompact,
-      renderPixelsPerSecond,
-      trackItems,
-      usesDensityOverview,
-    ],
-  )
-  const eligibleDetailIds = useMemo(
-    () => {
-      if (allItemsCompact) return EMPTY_SELECTED_ITEM_IDS
-      const detailCenter = (detailRange.start + detailRange.end) / 2
-      const candidates = getTimelineItemsForFrameRange(trackItems, detailRange)
-      return candidates
-        .filter(
-          (item) =>
-            !isTimelineItemCompactAtZoom(item.durationInFrames, fps, renderPixelsPerSecond),
-        )
-        .sort((left, right) => {
-          const leftCenter = left.from + left.durationInFrames / 2
-          const rightCenter = right.from + right.durationInFrames / 2
-          return Math.abs(leftCenter - detailCenter) - Math.abs(rightCenter - detailCenter)
-        })
-        .map((item) => item.id)
-    },
-    [
-      allItemsCompact,
-      detailRange,
-      fps,
-      renderPixelsPerSecond,
-      trackItems,
-    ],
-  )
+      .sort((left, right) => {
+        const leftCenter = left.from + left.durationInFrames / 2
+        const rightCenter = right.from + right.durationInFrames / 2
+        return Math.abs(leftCenter - detailCenter) - Math.abs(rightCenter - detailCenter)
+      })
+      .map((item) => item.id)
+  }, [allItemsCompact, detailRange, fps, renderPixelsPerSecond, trackItems])
   const immediateSelectedIds = useMemo(() => {
     return new Set(
       selectedItemIds
@@ -208,9 +194,7 @@ export const TimelineTrackItems = memo(function TimelineTrackItems({
     usesDensityOverview,
     visibleItemRangeIndex,
   ])
-  const renderedItemPresentation = usesDensityOverview
-    ? densityItemPresentation
-    : itemPresentation
+  const renderedItemPresentation = usesDensityOverview ? densityItemPresentation : itemPresentation
 
   return (
     <TimelineJoinIndicatorsZoomGate>
@@ -232,9 +216,7 @@ export const TimelineTrackItems = memo(function TimelineTrackItems({
             trackHidden={trackHidden}
             isDetailEligible={isDetailEligible}
             isCompactWidth={
-              !isDetailEligible ||
-              isCompactByWidth ||
-              !promotedDetailIds.has(item.id)
+              !isDetailEligible || isCompactByWidth || !promotedDetailIds.has(item.id)
             }
           />
         )

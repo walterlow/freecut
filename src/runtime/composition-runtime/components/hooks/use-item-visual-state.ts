@@ -173,12 +173,8 @@ export function useItemVisualState(
       y: exactDependencyWorldPreview.y,
       width: exactDependencyWorldPreview.width,
       height: exactDependencyWorldPreview.height,
-      anchorX:
-        exactDependencyWorldPreview.anchorX ??
-        exactDependencyWorldPreview.width / 2,
-      anchorY:
-        exactDependencyWorldPreview.anchorY ??
-        exactDependencyWorldPreview.height / 2,
+      anchorX: exactDependencyWorldPreview.anchorX ?? exactDependencyWorldPreview.width / 2,
+      anchorY: exactDependencyWorldPreview.anchorY ?? exactDependencyWorldPreview.height / 2,
       rotation: exactDependencyWorldPreview.rotation,
       opacity: exactDependencyWorldPreview.opacity,
       cornerRadius: exactDependencyWorldPreview.cornerRadius ?? 0,
@@ -192,16 +188,11 @@ export function useItemVisualState(
           keyframes: keyframesContext.getItemKeyframes(parent.id),
           getItem: keyframesContext.getItem,
           getKeyframes: keyframesContext.getItemKeyframes,
-          getPreviewTransform: (candidateId) =>
-            allItemPreviews?.[candidateId]?.transform,
+          getPreviewTransform: (candidateId) => allItemPreviews?.[candidateId]?.transform,
         })
       : undefined
 
-    return worldToLocalTransform(
-      worldPreview,
-      sourceItem.transformParent,
-      parentWorld,
-    )
+    return worldToLocalTransform(worldPreview, sourceItem.transformParent, parentWorld)
   }, [
     allItemPreviews,
     exactDependencyPreviewItemId,
@@ -432,8 +423,7 @@ export function useItemVisualState(
     // older item data still carries a persisted maskFeather value.
     const maskFeather = maskType === 'alpha' ? (firstMaskShape.maskFeather ?? 0) * uniformScale : 0
     const maskOpacity =
-      Math.max(0, Math.min(100, firstMaskShape.maskOpacity ?? 100)) /
-      100 *
+      (Math.max(0, Math.min(100, firstMaskShape.maskOpacity ?? 100)) / 100) *
       Math.max(0, Math.min(1, firstMask.transform.opacity ?? 1))
     const maskInvert = firstMaskShape.maskInvert ?? false
     const getPreviewPathVertices = (shapeId: string) =>

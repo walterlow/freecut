@@ -6,7 +6,7 @@
  * English partials are bundled eagerly; all other languages load on demand
  * via loadLanguageResources / changeAppLanguage.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vite-plus/test'
 import { i18n, changeAppLanguage, loadLanguageResources } from './index'
 
 // A key that lives only in partials (not in the base locale files), so it

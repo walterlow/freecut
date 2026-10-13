@@ -151,10 +151,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       crossfadeFadeOut,
       volumeMultiplier,
     })
-    const mediaPlaybackRate = getBrowserMediaPlaybackRate(
-      playbackRate,
-      transportPlaybackRate,
-    )
+    const mediaPlaybackRate = getBrowserMediaPlaybackRate(playbackRate, transportPlaybackRate)
     const isReverseShuttle = transportPlaybackRate < 0
 
     const [audioSlice, setAudioSlice] = useState<PlaybackAudioSlice | null>(null)

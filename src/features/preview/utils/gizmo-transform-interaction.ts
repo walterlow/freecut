@@ -89,12 +89,7 @@ export function attachWindowTransformInteraction({
     // release position (especially after a long or fast drag). Apply the
     // mouseup sample before reading the final transform so the committed value
     // and the visible gizmo always share the same endpoint.
-    updateInteraction(
-      toCanvasPoint(upEvent),
-      upEvent.shiftKey,
-      upEvent.ctrlKey,
-      upEvent.altKey,
-    )
+    updateInteraction(toCanvasPoint(upEvent), upEvent.shiftKey, upEvent.ctrlKey, upEvent.altKey)
     finishWindowTransformInteraction({
       removeListeners: () => {
         window.removeEventListener('mousemove', handleMouseMove)

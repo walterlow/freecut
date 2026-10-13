@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useSyncExternalStore,
-} from 'react'
+import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from 'react'
 import {
   getDirectPropertyLinks,
   getPropertyExpressions,
@@ -332,10 +326,7 @@ function collectTransformDependencySignature(
 
   return [...dependencyIds]
     .sort()
-    .map(
-      (itemId) =>
-        `${itemId}:${getTransformObjectId(getItemTransform(itemById[itemId]))}`,
-    )
+    .map((itemId) => `${itemId}:${getTransformObjectId(getItemTransform(itemById[itemId]))}`)
     .join('|')
 }
 
@@ -352,8 +343,7 @@ export function useLiveTransformDependencySignature(
   const subscribe = source?.subscribe ?? subscribeToNothing
   const resolvedGetKeyframes = getKeyframes ?? getNoItemKeyframes
   const getSnapshot = useCallback(
-    () =>
-      collectTransformDependencySignature(source, [item], resolvedGetKeyframes),
+    () => collectTransformDependencySignature(source, [item], resolvedGetKeyframes),
     [item, resolvedGetKeyframes, source],
   )
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
@@ -371,8 +361,7 @@ export function useLiveTransformDependencySignatureForItems(
   const subscribe = source?.subscribe ?? subscribeToNothing
   const resolvedGetKeyframes = getKeyframes ?? getNoItemKeyframes
   const getSnapshot = useCallback(
-    () =>
-      collectTransformDependencySignature(source, items, resolvedGetKeyframes),
+    () => collectTransformDependencySignature(source, items, resolvedGetKeyframes),
     [items, resolvedGetKeyframes, source],
   )
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)

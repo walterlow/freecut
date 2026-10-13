@@ -382,10 +382,7 @@ export function buildStableDomTracks({
     items: track.items.filter(
       (
         item,
-      ): item is Exclude<
-        TimelineItem,
-        VideoItem | AudioItem | AdjustmentItem | ControllerItem
-      > => {
+      ): item is Exclude<TimelineItem, VideoItem | AudioItem | AdjustmentItem | ControllerItem> => {
         if (
           item.type === 'video' ||
           item.type === 'audio' ||

@@ -60,19 +60,15 @@ describe('useDopesheetMarquee', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('keeps marquee movement local and commits selection once on release', () => {
-    const onSelectionChange = vi.fn<
-      (
-        keyframeIds: Set<string>,
-        options?: { preserveExternalSelection?: boolean },
-      ) => void
-    >()
+    const onSelectionChange =
+      vi.fn<(keyframeIds: Set<string>, options?: { preserveExternalSelection?: boolean }) => void>()
     const onSelectionPreviewChange = vi.fn<(keyframeIds: Set<string> | null) => void>()
-    const getKeyframePoints = vi.fn<
-      () => Array<{ keyframeId: string; x: number; y: number }>
-    >(() => [
-      { keyframeId: 'inside', x: 10, y: 10 },
-      { keyframeId: 'outside', x: 80, y: 80 },
-    ])
+    const getKeyframePoints = vi.fn<() => Array<{ keyframeId: string; x: number; y: number }>>(
+      () => [
+        { keyframeId: 'inside', x: 10, y: 10 },
+        { keyframeId: 'outside', x: 80, y: 80 },
+      ],
+    )
     render(
       <MarqueeHarness
         onSelectionChange={onSelectionChange}
@@ -109,12 +105,8 @@ describe('useDopesheetMarquee', () => {
   })
 
   it('coalesces pointer bursts and cancels without committing', () => {
-    const onSelectionChange = vi.fn<
-      (
-        keyframeIds: Set<string>,
-        options?: { preserveExternalSelection?: boolean },
-      ) => void
-    >()
+    const onSelectionChange =
+      vi.fn<(keyframeIds: Set<string>, options?: { preserveExternalSelection?: boolean }) => void>()
     const onSelectionPreviewChange = vi.fn<(keyframeIds: Set<string> | null) => void>()
     render(
       <MarqueeHarness

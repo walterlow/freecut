@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vite-plus/test'
 import { renderHook } from '@testing-library/react'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useVisualFreezeFrame } from './use-visual-freeze-frame'

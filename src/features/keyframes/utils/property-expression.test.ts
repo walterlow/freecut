@@ -14,9 +14,9 @@ describe('property expression sandbox', () => {
   }
 
   it('evaluates deterministic arithmetic, time, and property references', () => {
-    expect(
-      evaluatePropertyExpression('value + prop("source", "x") * time', context),
-    ).toEqual({ value: 30 })
+    expect(evaluatePropertyExpression('value + prop("source", "x") * time', context)).toEqual({
+      value: 30,
+    })
   })
 
   it('supports component-wise Vector2 math', () => {

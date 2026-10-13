@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import {
-  getBrowserMediaPlaybackRate,
-  getNextShuttleRate,
-} from './shuttle'
+import { getBrowserMediaPlaybackRate, getNextShuttleRate } from './shuttle'
 
 describe('shuttle playback', () => {
   it('ramps in one direction and resets to 1x on a direction flip', () => {

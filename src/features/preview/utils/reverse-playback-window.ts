@@ -33,10 +33,7 @@ export function resolveReversePlaybackWindowPlan(input: {
     Number.isFinite(input.presentationFps) && Number(input.presentationFps) > 0
       ? Number(input.presentationFps)
       : DEFAULT_PRESENTATION_FPS
-  const maxSamples = Math.max(
-    2,
-    Math.round(input.maxSamples ?? DEFAULT_REVERSE_WINDOW_SAMPLES),
-  )
+  const maxSamples = Math.max(2, Math.round(input.maxSamples ?? DEFAULT_REVERSE_WINDOW_SAMPLES))
   const strideFrames = Math.max(1, Math.round((rate * fps) / presentationFps))
   const targetFrames: number[] = []
 
@@ -74,10 +71,7 @@ export function shouldQueueReversePlaybackWindow(input: {
   ) {
     return true
   }
-  if (
-    input.targetFrame > input.preparedHighFrame ||
-    input.targetFrame < input.preparedLowFrame
-  ) {
+  if (input.targetFrame > input.preparedHighFrame || input.targetFrame < input.preparedLowFrame) {
     return true
   }
   return input.targetFrame <= input.refillFrame

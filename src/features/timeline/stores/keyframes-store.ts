@@ -100,10 +100,7 @@ interface KeyframesActions {
   _removeKeyframesForItem: (itemId: string) => void
   _removeKeyframesForItems: (itemIds: string[]) => void
   _removeKeyframesForProperty: (itemId: string, property: AnimatableProperty) => void
-  _removeVectorKeyframesForProperty: (
-    itemId: string,
-    property: VectorAnimatableProperty,
-  ) => void
+  _removeVectorKeyframesForProperty: (itemId: string, property: VectorAnimatableProperty) => void
   _removeKeyframesByApplication: (itemId: string, applicationId: string) => void
   _removeManualKeyframes: (itemId: string) => void
   _setDirectPropertyLink: (itemId: string, link: DirectPropertyLink) => void
@@ -524,8 +521,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()((se
               (link) => !idsSet.has(link.sourceItemId),
             ),
             expressions: itemKeyframes.expressions?.filter(
-              (expression) =>
-                expression.type !== 'link' || !idsSet.has(expression.sourceItemId),
+              (expression) => expression.type !== 'link' || !idsSet.has(expression.sourceItemId),
             ),
           }))
           .filter(hasStoredAnimation),
@@ -931,7 +927,11 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()((se
         return {
           keyframes: [
             ...state.keyframes,
-            updateItemKeyframes({ itemId, animationVersion: ANIMATION_CORE_VERSION, properties: [] }),
+            updateItemKeyframes({
+              itemId,
+              animationVersion: ANIMATION_CORE_VERSION,
+              properties: [],
+            }),
           ],
         }
       }

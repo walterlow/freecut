@@ -33,24 +33,17 @@ export function getPlaybackFollowScrollLeft({
 
   const visibleRight = scrollLeft + viewportWidth
   const beforeViewport = playheadX < scrollLeft
-  const atForwardEdge =
-    playbackDirection > 0 && playheadX >= visibleRight - EDGE_EPSILON_PX
-  const atReverseEdge =
-    playbackDirection < 0 && playheadX <= scrollLeft + EDGE_EPSILON_PX
+  const atForwardEdge = playbackDirection > 0 && playheadX >= visibleRight - EDGE_EPSILON_PX
+  const atReverseEdge = playbackDirection < 0 && playheadX <= scrollLeft + EDGE_EPSILON_PX
   const jumpedPastOppositeEdge =
-    (playbackDirection > 0 && beforeViewport) ||
-    (playbackDirection < 0 && playheadX > visibleRight)
+    (playbackDirection > 0 && beforeViewport) || (playbackDirection < 0 && playheadX > visibleRight)
 
   if (!atForwardEdge && !atReverseEdge && !jumpedPastOppositeEdge) {
     return null
   }
 
-  const anchor =
-    playbackDirection > 0 ? FORWARD_PLAYHEAD_ANCHOR : REVERSE_PLAYHEAD_ANCHOR
-  const nextScrollLeft = Math.max(
-    0,
-    Math.min(maxScrollLeft, playheadX - viewportWidth * anchor),
-  )
+  const anchor = playbackDirection > 0 ? FORWARD_PLAYHEAD_ANCHOR : REVERSE_PLAYHEAD_ANCHOR
+  const nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, playheadX - viewportWidth * anchor))
 
   return Math.abs(nextScrollLeft - scrollLeft) >= 0.5 ? nextScrollLeft : null
 }

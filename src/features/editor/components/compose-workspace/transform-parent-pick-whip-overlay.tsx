@@ -16,12 +16,6 @@ interface TransformParentDragState {
   presentation: MotionPickWhipPresentation
 }
 
-export function TransformParentPickWhipOverlay({
-  drag,
-}: {
-  drag: TransformParentDragState
-}) {
-  return (
-    <PickWhipOverlay presentation={drag.presentation} testId="transform-parent-pick-whip" />
-  )
+export function TransformParentPickWhipOverlay({ drag }: { drag: TransformParentDragState }) {
+  return <PickWhipOverlay presentation={drag.presentation} testId="transform-parent-pick-whip" />
 }

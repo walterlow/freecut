@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import type { ItemKeyframes } from '@/types/keyframe'
 import { getPositionLinkOwner } from './position-link-ownership'
 

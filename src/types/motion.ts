@@ -9,11 +9,7 @@
  * The evaluator lives in `@/features/keyframes/utils/motion-modifier-eval`.
  */
 
-import type {
-  EasingConfig,
-  EasingType,
-  TransformAnimatableProperty,
-} from './keyframe'
+import type { EasingConfig, EasingType, TransformAnimatableProperty } from './keyframe'
 
 export type MotionModifierType = 'float-drift' | 'breath-pulse' | 'micro-shake' | 'sway' | 'spin'
 

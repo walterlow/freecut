@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import { listMcpTools, callMcpTool } from './mcp'
 import { listEditorTools } from './registry'
 

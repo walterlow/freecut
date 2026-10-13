@@ -52,10 +52,8 @@ export function shouldShowSeparatedPosition(
     return true
   }
 
-  const x =
-    itemKeyframes.properties.find((property) => property.property === 'x')?.keyframes ?? []
-  const y =
-    itemKeyframes.properties.find((property) => property.property === 'y')?.keyframes ?? []
+  const x = itemKeyframes.properties.find((property) => property.property === 'x')?.keyframes ?? []
+  const y = itemKeyframes.properties.find((property) => property.property === 'y')?.keyframes ?? []
   if (x.length === 0 || y.length === 0) return false
   return !scalarTimingsMatch(x, y)
 }

@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from 'vite-plus/test'
 import {
   HOTKEYS,
   HOTKEY_EXPORT_SCHEMA,
@@ -15,10 +15,10 @@ import {
   parseHotkeyImportDocument,
   resolveHotkeys,
   sanitizeHotkeyOverrides,
-} from "./hotkeys";
+} from './hotkeys'
 
-describe("keyframe productivity hotkeys", () => {
-  it("provides distinct defaults for the focused editor workflow", () => {
+describe('keyframe productivity hotkeys', () => {
+  it('provides distinct defaults for the focused editor workflow', () => {
     expect({
       split: HOTKEYS.KEYFRAME_EDITOR_SPLIT,
       addInEdit: HOTKEYS.EDIT_KEYFRAME_ADD,
@@ -27,297 +27,289 @@ describe("keyframe productivity hotkeys", () => {
       auto: HOTKEYS.KEYFRAME_TOGGLE_AUTO,
       fit: HOTKEYS.KEYFRAME_FIT,
     }).toEqual({
-      split: "3",
-      addInEdit: "k",
-      previous: "alt+bracketleft",
-      next: "alt+bracketright",
-      auto: "a",
-      fit: "f",
-    });
-  });
-});
+      split: '3',
+      addInEdit: 'k',
+      previous: 'alt+bracketleft',
+      next: 'alt+bracketright',
+      auto: 'a',
+      fit: 'f',
+    })
+  })
+})
 
-describe("normalizeHotkeyBinding", () => {
-  it("orders modifiers consistently and normalizes aliases", () => {
-    expect(normalizeHotkeyBinding("Shift+Ctrl+ArrowLeft")).toBe(
-      "mod+shift+left",
-    );
-  });
-});
+describe('normalizeHotkeyBinding', () => {
+  it('orders modifiers consistently and normalizes aliases', () => {
+    expect(normalizeHotkeyBinding('Shift+Ctrl+ArrowLeft')).toBe('mod+shift+left')
+  })
+})
 
-describe("formatHotkeyBinding", () => {
-  it("formats modifier labels for mac", () => {
-    expect(formatHotkeyBinding("mod+alt+k", "MacIntel")).toBe(
-      "Cmd + Option + K",
-    );
-  });
+describe('formatHotkeyBinding', () => {
+  it('formats modifier labels for mac', () => {
+    expect(formatHotkeyBinding('mod+alt+k', 'MacIntel')).toBe('Cmd + Option + K')
+  })
 
-  it("formats punctuation bindings for windows", () => {
-    expect(formatHotkeyBinding("mod+shift+comma", "Win32")).toBe(
-      "Ctrl + Shift + ,",
-    );
-  });
-});
+  it('formats punctuation bindings for windows', () => {
+    expect(formatHotkeyBinding('mod+shift+comma', 'Win32')).toBe('Ctrl + Shift + ,')
+  })
+})
 
-describe("getBrowserHostileHotkey", () => {
-  it("detects browser-reserved shortcuts after normalization", () => {
-    expect(getBrowserHostileHotkey("Ctrl+E")).toEqual({
-      binding: "mod+e",
-      browserAction: "Focus search or address bar in some browsers",
-    });
-  });
+describe('getBrowserHostileHotkey', () => {
+  it('detects browser-reserved shortcuts after normalization', () => {
+    expect(getBrowserHostileHotkey('Ctrl+E')).toEqual({
+      binding: 'mod+e',
+      browserAction: 'Focus search or address bar in some browsers',
+    })
+  })
 
-  it("returns null for browser-safe shortcuts", () => {
-    expect(getBrowserHostileHotkey("shift+j")).toBeNull();
-  });
+  it('returns null for browser-safe shortcuts', () => {
+    expect(getBrowserHostileHotkey('shift+j')).toBeNull()
+  })
 
-  it("flags browser zoom shortcuts as hostile", () => {
-    expect(getBrowserHostileHotkey("Ctrl+=")).toEqual({
-      binding: "mod+equal",
-      browserAction: "Browser zoom in",
-    });
-    expect(getBrowserHostileHotkey("Ctrl+-")).toEqual({
-      binding: "mod+minus",
-      browserAction: "Browser zoom out",
-    });
-    expect(getBrowserHostileHotkey("Ctrl+0")).toEqual({
-      binding: "mod+0",
-      browserAction: "Reset browser zoom",
-    });
-  });
+  it('flags browser zoom shortcuts as hostile', () => {
+    expect(getBrowserHostileHotkey('Ctrl+=')).toEqual({
+      binding: 'mod+equal',
+      browserAction: 'Browser zoom in',
+    })
+    expect(getBrowserHostileHotkey('Ctrl+-')).toEqual({
+      binding: 'mod+minus',
+      browserAction: 'Browser zoom out',
+    })
+    expect(getBrowserHostileHotkey('Ctrl+0')).toEqual({
+      binding: 'mod+0',
+      browserAction: 'Reset browser zoom',
+    })
+  })
 
-  it("flags Ctrl+Shift+L as hostile and leaves Shift+L available", () => {
-    expect(getBrowserHostileHotkey("Ctrl+Shift+L")).toEqual({
-      binding: "mod+shift+l",
-      browserAction: "Focus address bar or search in some browsers",
-    });
-    expect(getBrowserHostileHotkey("Shift+L")).toBeNull();
-  });
-});
+  it('flags Ctrl+Shift+L as hostile and leaves Shift+L available', () => {
+    expect(getBrowserHostileHotkey('Ctrl+Shift+L')).toEqual({
+      binding: 'mod+shift+l',
+      browserAction: 'Focus address bar or search in some browsers',
+    })
+    expect(getBrowserHostileHotkey('Shift+L')).toBeNull()
+  })
+})
 
-describe("getHotkeyBindingFromEventData", () => {
-  it("captures letter bindings with modifiers", () => {
+describe('getHotkeyBindingFromEventData', () => {
+  it('captures letter bindings with modifiers', () => {
     expect(
       getHotkeyBindingFromEventData({
-        code: "KeyA",
-        key: "a",
+        code: 'KeyA',
+        key: 'a',
         ctrlKey: true,
         shiftKey: true,
       }),
-    ).toBe("mod+shift+a");
-  });
+    ).toBe('mod+shift+a')
+  })
 
-  it("captures modifier-only previews before a final key lands", () => {
+  it('captures modifier-only previews before a final key lands', () => {
     expect(
       getHotkeyBindingFromEventData({
-        code: "ShiftLeft",
-        key: "Shift",
+        code: 'ShiftLeft',
+        key: 'Shift',
         shiftKey: true,
       }),
-    ).toBe("shift");
-  });
+    ).toBe('shift')
+  })
 
-  it("uses event.code for shifted punctuation keys", () => {
+  it('uses event.code for shifted punctuation keys', () => {
     expect(
       getHotkeyPrimaryTokenFromEventData({
-        code: "Comma",
-        key: "<",
+        code: 'Comma',
+        key: '<',
         shiftKey: true,
       }),
-    ).toBe("comma");
-  });
-});
+    ).toBe('comma')
+  })
+})
 
-describe("findHotkeyConflicts", () => {
-  it("returns other bindings using the same normalized shortcut", () => {
+describe('findHotkeyConflicts', () => {
+  it('returns other bindings using the same normalized shortcut', () => {
     const bindings = resolveHotkeys({
-      SELECTION_TOOL: "c",
-    });
+      SELECTION_TOOL: 'c',
+    })
 
-    expect(findHotkeyConflicts(bindings, "c", "SELECTION_TOOL")).toEqual([
-      "RAZOR_TOOL",
-    ]);
-  });
-});
+    expect(findHotkeyConflicts(bindings, 'c', 'SELECTION_TOOL')).toEqual(['RAZOR_TOOL'])
+  })
+})
 
-describe("sanitizeHotkeyOverrides", () => {
-  it("keeps only supported commands with normalized non-default bindings", () => {
+describe('sanitizeHotkeyOverrides', () => {
+  it('keeps only supported commands with normalized non-default bindings', () => {
     expect(
       sanitizeHotkeyOverrides({
-        PLAY_PAUSE: " Shift+Space ",
-        EXPORT: "Ctrl+E",
-        UNKNOWN_COMMAND: "q",
-        DELETE_SELECTED: "",
+        PLAY_PAUSE: ' Shift+Space ',
+        EXPORT: 'Ctrl+E',
+        UNKNOWN_COMMAND: 'q',
+        DELETE_SELECTED: '',
       }),
     ).toEqual({
-      PLAY_PAUSE: "shift+space",
-      EXPORT: "mod+e",
-      DELETE_SELECTED: "",
-    });
-  });
-});
+      PLAY_PAUSE: 'shift+space',
+      EXPORT: 'mod+e',
+      DELETE_SELECTED: '',
+    })
+  })
+})
 
-describe("createHotkeyExportDocument", () => {
-  it("creates a versioned export with command metadata and sanitized overrides", () => {
+describe('createHotkeyExportDocument', () => {
+  it('creates a versioned export with command metadata and sanitized overrides', () => {
     const exportDocument = createHotkeyExportDocument({
-      PLAY_PAUSE: "Shift+Space",
-      EXPORT: "Ctrl+E",
-    });
+      PLAY_PAUSE: 'Shift+Space',
+      EXPORT: 'Ctrl+E',
+    })
 
-    expect(exportDocument.schema).toBe(HOTKEY_EXPORT_SCHEMA);
-    expect(exportDocument.version).toBe(HOTKEY_EXPORT_VERSION);
+    expect(exportDocument.schema).toBe(HOTKEY_EXPORT_SCHEMA)
+    expect(exportDocument.version).toBe(HOTKEY_EXPORT_VERSION)
     expect(exportDocument.overrides).toEqual({
-      PLAY_PAUSE: "shift+space",
-      EXPORT: "mod+e",
-    });
+      PLAY_PAUSE: 'shift+space',
+      EXPORT: 'mod+e',
+    })
     expect(exportDocument.commands).toContainEqual(
       expect.objectContaining({
-        id: "PLAY_PAUSE",
-        label: "Play/Pause",
-        binding: "shift+space",
-        defaultBinding: "space",
+        id: 'PLAY_PAUSE',
+        label: 'Play/Pause',
+        binding: 'shift+space',
+        defaultBinding: 'space',
         isCustom: true,
       }),
-    );
+    )
     expect(exportDocument.commands).toContainEqual(
       expect.objectContaining({
-        id: "EXPORT",
-        binding: "mod+e",
-        defaultBinding: "mod+shift+e",
+        id: 'EXPORT',
+        binding: 'mod+e',
+        defaultBinding: 'mod+shift+e',
         isCustom: true,
       }),
-    );
-  });
+    )
+  })
 
-  it("exports explicitly unassigned commands as custom blank bindings", () => {
+  it('exports explicitly unassigned commands as custom blank bindings', () => {
     const exportDocument = createHotkeyExportDocument({
-      DELETE_SELECTED: "",
-    });
+      DELETE_SELECTED: '',
+    })
 
     expect(exportDocument.overrides).toEqual({
-      DELETE_SELECTED: "",
-    });
+      DELETE_SELECTED: '',
+    })
     expect(exportDocument.commands).toContainEqual(
       expect.objectContaining({
-        id: "DELETE_SELECTED",
-        binding: "",
-        defaultBinding: "delete",
+        id: 'DELETE_SELECTED',
+        binding: '',
+        defaultBinding: 'delete',
         isCustom: true,
       }),
-    );
-  });
-});
+    )
+  })
+})
 
-describe("parseHotkeyImportDocument", () => {
-  it("imports versioned override payloads and ignores unknown commands", () => {
+describe('parseHotkeyImportDocument', () => {
+  it('imports versioned override payloads and ignores unknown commands', () => {
     expect(
       parseHotkeyImportDocument({
         schema: HOTKEY_EXPORT_SCHEMA,
         version: 1,
         overrides: {
-          PLAY_PAUSE: "Shift+Space",
-          UNKNOWN_COMMAND: "q",
+          PLAY_PAUSE: 'Shift+Space',
+          UNKNOWN_COMMAND: 'q',
         },
       }),
     ).toEqual({
       overrides: {
-        PLAY_PAUSE: "shift+space",
+        PLAY_PAUSE: 'shift+space',
       },
       importedCommandCount: 1,
       ignoredCommandCount: 1,
       remappedCommandCount: 0,
       sourceVersion: 1,
-    });
-  });
+    })
+  })
 
-  it("falls back to command entries when overrides are missing", () => {
+  it('falls back to command entries when overrides are missing', () => {
     expect(
       parseHotkeyImportDocument({
         schema: HOTKEY_EXPORT_SCHEMA,
         version: 1,
         commands: [
-          { id: "PLAY_PAUSE", binding: "Shift+Space" },
-          { id: "EXPORT", binding: "Ctrl+E" },
-          { id: "UNKNOWN_COMMAND", binding: "q" },
+          { id: 'PLAY_PAUSE', binding: 'Shift+Space' },
+          { id: 'EXPORT', binding: 'Ctrl+E' },
+          { id: 'UNKNOWN_COMMAND', binding: 'q' },
         ],
       }),
     ).toEqual({
       overrides: {
-        PLAY_PAUSE: "shift+space",
-        EXPORT: "mod+e",
+        PLAY_PAUSE: 'shift+space',
+        EXPORT: 'mod+e',
       },
       importedCommandCount: 2,
       ignoredCommandCount: 1,
       remappedCommandCount: 0,
       sourceVersion: 1,
-    });
-  });
+    })
+  })
 
-  it("remaps renamed commands from exported metadata when ids no longer match", () => {
+  it('remaps renamed commands from exported metadata when ids no longer match', () => {
     expect(
       parseHotkeyImportDocument({
         schema: HOTKEY_EXPORT_SCHEMA,
         version: 1,
         commands: [
           {
-            id: "PLAYBACK_TOGGLE_OLD",
-            label: "Play/Pause",
-            defaultBinding: "space",
-            binding: "Shift+Space",
+            id: 'PLAYBACK_TOGGLE_OLD',
+            label: 'Play/Pause',
+            defaultBinding: 'space',
+            binding: 'Shift+Space',
           },
         ],
       }),
     ).toEqual({
       overrides: {
-        PLAY_PAUSE: "shift+space",
+        PLAY_PAUSE: 'shift+space',
       },
       importedCommandCount: 1,
       ignoredCommandCount: 0,
       remappedCommandCount: 1,
       sourceVersion: 1,
-    });
-  });
+    })
+  })
 
-  it("imports explicitly unassigned shortcuts", () => {
+  it('imports explicitly unassigned shortcuts', () => {
     expect(
       parseHotkeyImportDocument({
         schema: HOTKEY_EXPORT_SCHEMA,
         version: 1,
         commands: [
-          { id: "PLAY_PAUSE", binding: "" },
-          { id: "EXPORT", binding: "Ctrl+E" },
+          { id: 'PLAY_PAUSE', binding: '' },
+          { id: 'EXPORT', binding: 'Ctrl+E' },
         ],
       }),
     ).toEqual({
       overrides: {
-        PLAY_PAUSE: "",
-        EXPORT: "mod+e",
+        PLAY_PAUSE: '',
+        EXPORT: 'mod+e',
       },
       importedCommandCount: 2,
       ignoredCommandCount: 0,
       remappedCommandCount: 0,
       sourceVersion: 1,
-    });
-  });
+    })
+  })
 
-  it("supports plain legacy key-binding maps", () => {
+  it('supports plain legacy key-binding maps', () => {
     expect(
       parseHotkeyImportDocument({
-        PLAY_PAUSE: "Shift+Space",
-        EXPORT: "Ctrl+E",
-        DELETE_SELECTED: "",
-        UNKNOWN_COMMAND: "q",
+        PLAY_PAUSE: 'Shift+Space',
+        EXPORT: 'Ctrl+E',
+        DELETE_SELECTED: '',
+        UNKNOWN_COMMAND: 'q',
       }),
     ).toEqual({
       overrides: {
-        PLAY_PAUSE: "shift+space",
-        EXPORT: "mod+e",
-        DELETE_SELECTED: "",
+        PLAY_PAUSE: 'shift+space',
+        EXPORT: 'mod+e',
+        DELETE_SELECTED: '',
       },
       importedCommandCount: 3,
       ignoredCommandCount: 1,
       remappedCommandCount: 0,
       sourceVersion: null,
-    });
-  });
-});
+    })
+  })
+})

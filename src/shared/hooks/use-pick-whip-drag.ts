@@ -82,11 +82,7 @@ interface UseMotionPickWhipDragOptions<TOrigin, TCandidate> {
     origin: TOrigin,
   ) => MotionPickWhipTarget<TCandidate>
   onCommit: (origin: TOrigin, candidate: TCandidate, modifiers: MotionPickWhipModifiers) => void
-  onReject?: (
-    origin: TOrigin,
-    message: string,
-    modifiers: MotionPickWhipModifiers,
-  ) => void
+  onReject?: (origin: TOrigin, message: string, modifiers: MotionPickWhipModifiers) => void
 }
 
 const AUTO_SCROLL_EDGE_PX = 48
@@ -257,14 +253,9 @@ export function useMotionPickWhipDrag<TOrigin, TCandidate>(
         current.currentY,
         current.origin,
       )
-      const candidate =
-        target?.status === 'valid'
-          ? { row: target.row, value: target.value }
-          : null
+      const candidate = target?.status === 'valid' ? { row: target.row, value: target.value } : null
       const rejection =
-        target?.status === 'invalid'
-          ? { row: target.row, message: target.message }
-          : null
+        target?.status === 'invalid' ? { row: target.row, message: target.message } : null
       updateHover(hoverRef, candidate?.row ?? null, optionsRef.current.hoverAttribute)
       const rejectionAttribute = optionsRef.current.rejectionHoverAttribute
       if (rejectionAttribute) {
@@ -368,10 +359,7 @@ export function useMotionPickWhipDrag<TOrigin, TCandidate>(
         commit && current.moved
           ? optionsRef.current.resolveTarget(event.clientX, event.clientY, current.origin)
           : null
-      const candidate =
-        target?.status === 'valid'
-          ? { row: target.row, value: target.value }
-          : null
+      const candidate = target?.status === 'valid' ? { row: target.row, value: target.value } : null
       const rejection = target?.status === 'invalid' ? target : null
       clearHover()
       clearRejectionHover()

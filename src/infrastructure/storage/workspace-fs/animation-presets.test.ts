@@ -303,9 +303,9 @@ describe('workspace animation presets storage', () => {
   })
 
   it('continues loading legacy v1 scalar-only preset files', () => {
-    expect(
-      sanitizeAnimationPresets({ version: 1, presets: [makePreset()] }),
-    ).toEqual([makePreset()])
+    expect(sanitizeAnimationPresets({ version: 1, presets: [makePreset()] })).toEqual([
+      makePreset(),
+    ])
   })
 
   it('returns an empty set when the file does not exist', async () => {

@@ -48,13 +48,7 @@ export function buildPathGeometryPersistence(params: {
   }
 
   const normalOperations = changedValues.flatMap(({ property, value }) => {
-    const operation = getAutoKeyframeOperation(
-      item,
-      itemKeyframes,
-      property,
-      value,
-      currentFrame,
-    )
+    const operation = getAutoKeyframeOperation(item, itemKeyframes, property, value, currentFrame)
     return operation ? [operation] : []
   })
   if (!pathIsAnimated && normalOperations.length === 0) {

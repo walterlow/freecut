@@ -127,10 +127,7 @@ const easing = z.enum([
 const easingConfigSchema = z
   .object({
     type: easing,
-    bezier: z
-      .object({ x1: finite, y1: finite, x2: finite, y2: finite })
-      .strict()
-      .optional(),
+    bezier: z.object({ x1: finite, y1: finite, x2: finite, y2: finite }).strict().optional(),
     spring: z
       .object({
         tension: z.number().min(0).max(500),

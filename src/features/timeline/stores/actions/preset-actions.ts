@@ -100,35 +100,32 @@ function resolvePresetVectorKeyframes(params: {
       skipped += 1
       continue
     }
-    byFrame.set(
-      frame,
-      {
-        ...cloneVectorKeyframe(keyframe, { id: crypto.randomUUID(), frame }),
-        source,
-        ...(keyframe.temporalEase && {
-          temporalEase: {
-            ...(keyframe.temporalEase.in && {
-              in: {
-                ...keyframe.temporalEase.in,
-                speed:
-                  timeScale > 0
-                    ? keyframe.temporalEase.in.speed / timeScale
-                    : keyframe.temporalEase.in.speed,
-              },
-            }),
-            ...(keyframe.temporalEase.out && {
-              out: {
-                ...keyframe.temporalEase.out,
-                speed:
-                  timeScale > 0
-                    ? keyframe.temporalEase.out.speed / timeScale
-                    : keyframe.temporalEase.out.speed,
-              },
-            }),
-          },
-        }),
-      },
-    )
+    byFrame.set(frame, {
+      ...cloneVectorKeyframe(keyframe, { id: crypto.randomUUID(), frame }),
+      source,
+      ...(keyframe.temporalEase && {
+        temporalEase: {
+          ...(keyframe.temporalEase.in && {
+            in: {
+              ...keyframe.temporalEase.in,
+              speed:
+                timeScale > 0
+                  ? keyframe.temporalEase.in.speed / timeScale
+                  : keyframe.temporalEase.in.speed,
+            },
+          }),
+          ...(keyframe.temporalEase.out && {
+            out: {
+              ...keyframe.temporalEase.out,
+              speed:
+                timeScale > 0
+                  ? keyframe.temporalEase.out.speed / timeScale
+                  : keyframe.temporalEase.out.speed,
+            },
+          }),
+        },
+      }),
+    })
     applied += 1
   }
 
@@ -264,8 +261,7 @@ export function applyAnimationPreset(
   const maxFrame = Math.max(0, resolvedItem.durationInFrames - 1)
   const sourceLastFrame = Math.max(1, preset.sourceDurationInFrames - 1)
   const targetAvailableFrames = Math.max(0, maxFrame - anchorFrame)
-  const timeScale =
-    options.retime === false ? 1 : targetAvailableFrames / sourceLastFrame
+  const timeScale = options.retime === false ? 1 : targetAvailableFrames / sourceLastFrame
   const retimeFrame = (frame: number) =>
     options.retime === false ? frame : Math.round(frame * timeScale)
 

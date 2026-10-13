@@ -228,21 +228,18 @@ export function useTimelineAudioSkimPreview(): void {
   )
   skimPreviewFrameRef.current = skimPreviewFrame
 
-  const scheduleAudioSkim = useCallback(
-    (frame: number) => {
-      pendingFrameRef.current = frame
-      if (rafRef.current !== null) return
+  const scheduleAudioSkim = useCallback((frame: number) => {
+    pendingFrameRef.current = frame
+    if (rafRef.current !== null) return
 
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null
-        const nextFrame = pendingFrameRef.current
-        pendingFrameRef.current = null
-        if (nextFrame === null) return
-        latestAudioSkimRunnerRef.current?.schedule(nextFrame)
-      })
-    },
-    [],
-  )
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      const nextFrame = pendingFrameRef.current
+      pendingFrameRef.current = null
+      if (nextFrame === null) return
+      latestAudioSkimRunnerRef.current?.schedule(nextFrame)
+    })
+  }, [])
 
   useEffect(() => {
     if (audioSkimmingEnabled) return

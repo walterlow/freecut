@@ -1,11 +1,4 @@
-import React, {
-  useCallback,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-} from 'react'
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useVideoConfig } from '../hooks/use-player-compat'
 import type { TimelineItem } from '@/types/timeline'
 import { BLEND_MODE_CSS } from '@/types/blend-mode-css'
@@ -279,24 +272,16 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
   const keyframesContext = useContext(KeyframesContext)
   const itemKeyframes = useRuntimeItemKeyframes(item.id)
   const getDependencyItem = useCallback(
-    (itemId: string) =>
-      getLiveItem(itemId) ?? keyframesContext?.getItem(itemId),
+    (itemId: string) => getLiveItem(itemId) ?? keyframesContext?.getItem(itemId),
     [getLiveItem, keyframesContext],
   )
   const getDependencyKeyframes = useCallback(
     (itemId: string) =>
-      itemId === item.id
-        ? itemKeyframes
-        : keyframesContext?.getItemKeyframes(itemId),
+      itemId === item.id ? itemKeyframes : keyframesContext?.getItemKeyframes(itemId),
     [item.id, itemKeyframes, keyframesContext],
   )
   const transformDependencyPlan = useMemo(
-    () =>
-      buildItemTransformDependencyPlan(
-        item,
-        getDependencyItem,
-        getDependencyKeyframes,
-      ),
+    () => buildItemTransformDependencyPlan(item, getDependencyItem, getDependencyKeyframes),
     [getDependencyItem, getDependencyKeyframes, item],
   )
 
@@ -352,8 +337,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
           : null)
       if (
         !presentation ||
-        (presentation.settling &&
-          acknowledgedHandoffRef.current === presentation.interactionId)
+        (presentation.settling && acknowledgedHandoffRef.current === presentation.interactionId)
       ) {
         presentationInteractionRef.current = null
         transformNode.style.removeProperty('translate')
@@ -410,10 +394,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     syncGizmoPresentation(useGizmoStore.getState())
   }, [state.transform, syncGizmoPresentation])
 
-  useEffect(
-    () => useGizmoStore.subscribe(syncGizmoPresentation),
-    [syncGizmoPresentation],
-  )
+  useEffect(() => useGizmoStore.subscribe(syncGizmoPresentation), [syncGizmoPresentation])
   const isPlaying = usePlaybackStore((playback) => playback.isPlaying)
   const shouldRasterizeSvgMask = shouldRasterizeSvgMaskForFrame({
     maskType: state.maskType,

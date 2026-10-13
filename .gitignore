@@ -99,3 +99,4 @@ ds-bundle/
 
 artifacts/
 .playwright-cli/
+.vitest/

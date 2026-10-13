@@ -50,7 +50,7 @@ The markdown header `## [Current] — week of YYYY-MM-DD` is a literal string an
 
 ### 3. `current` + releases must fully cover the git log since the last release
 
-The skill's default mode is incremental *append*, which trusts `current` to already hold everything prior and only adds newly-mentioned commits. That trust breaks silently when a week (or an append) is skipped: those commits never enter the changelog and nothing flags them — the outcome then depends on how often someone remembers to run the skill. Close that gap by reconciling against git on **every** run, so infrequent triggering is lossless instead of lossy.
+The skill's default mode is incremental _append_, which trusts `current` to already hold everything prior and only adds newly-mentioned commits. That trust breaks silently when a week (or an append) is skipped: those commits never enter the changelog and nothing flags them — the outcome then depends on how often someone remembers to run the skill. Close that gap by reconciling against git on **every** run, so infrequent triggering is lossless instead of lossy.
 
 Before drafting/appending/rolling up, walk `git log <branch> --no-merges --since=<date-of-last-release>` and confirm every user-facing commit (after curation rules) is represented in either `current` or an existing release. Surface anything missing to the user and fold it in — do not assume `current` is complete just because it has bullets. This is the check that would have caught the missing 2026-06-15 launches at append time instead of three weeks later. The reconciliation is against the curated git log, not a raw commit count: dropped noise (chore/ci/test/refactor, same-week regressions, follow-ups) is expected to be absent and is not a gap.
 
@@ -117,11 +117,13 @@ Pre-PR era (if any): collapse the foundation into one initial release entry, dat
 Before keeping any bullet, ask: **would a user notice this if they used the app today vs. yesterday, without diffing screenshots?** If no, drop it. This is the single most important filter — apply it to every candidate bullet, not just borderline ones.
 
 Concretely, a bullet survives only if it changes something the user can see, do, or feel:
+
 - A new control, panel, shortcut, format, or capability
 - A bug they hit (or could hit) is gone
 - A workflow that visibly stalled, jittered, or felt sluggish is now smooth in a way they'd remark on
 
 A bullet fails if it only describes:
+
 - Internal mechanics (allocation, caching, dirty-marking, dispatch, refs, props)
 - Sub-pixel or single-pixel visual tweaks (centering, alignment, hover color shifts, tiny margins)
 - Hit-target widening, drop-zone expansion, ghost-position adjustments — fold into the parent feature instead
@@ -144,13 +146,14 @@ Before writing bullets for a feature area, sanity-check the framing:
 The user once flagged this directly: an i18n week was drafted as "Turkish language support" + two localization fixes. The actual story was "UI is now translated, with 9 languages." The Turkish commit looked incremental because the operator was thinking from inside the feature; the user reading "What's New" had no prior context that translations existed at all.
 
 When you spot a launch:
+
 - Lead with the capability ("Translated UI in 9 languages — …", "Subtitle editing on the timeline", "Pen tool for masks").
 - List the supporting facets only if they're not obviously implied (a language picker is implied by "translated UI"; ASS subtitle support inside subtitle editing might be worth its own bullet).
 - Resist the urge to itemize every commit just because they're all in the Added group.
 
 ## Verify the net state, not the commit stream
 
-Commits are a *stream of deltas*; the changelog describes the *net difference* between the last release and HEAD. A feature added on Tuesday and ripped back out on Thursday is, to the user, as if it never shipped — there is nothing to announce. But the naive draft still emits an "Added" bullet, because the `feat(...)` commit is sitting right there in the log and nothing downstream cancels it *in the text*. The removal happened in the code, not in the commit subject you're reading.
+Commits are a _stream of deltas_; the changelog describes the _net difference_ between the last release and HEAD. A feature added on Tuesday and ripped back out on Thursday is, to the user, as if it never shipped — there is nothing to announce. But the naive draft still emits an "Added" bullet, because the `feat(...)` commit is sitting right there in the log and nothing downstream cancels it _in the text_. The removal happened in the code, not in the commit subject you're reading.
 
 Before finalizing any **Added** or **Improved** bullet, confirm the thing it describes still exists at HEAD:
 
@@ -161,7 +164,7 @@ Before finalizing any **Added** or **Improved** bullet, confirm the thing it des
 
 This generalizes the "reverts paired with a re-fix" rule below. It also catches the cases that rule misses: an add later removed with **no** replacement, an add superseded by a **differently-named** replacement (log only the survivor, worded as the survivor), and an experiment merged in one PR then reverted in another.
 
-**The one exception — removing something that already shipped.** If the removed feature was in a *prior release*, the user has been using it, so its removal is itself a user-facing change: they had it yesterday, it's gone today. That is worth announcing (and any migration note that comes with it). The JSON schema has no `Removed` group, so **surface it to the user** and let them decide wording and placement rather than silently dropping it or inventing a group. The added-then-removed-same-window case above is the opposite: the user never had it, so nothing is announced.
+**The one exception — removing something that already shipped.** If the removed feature was in a _prior release_, the user has been using it, so its removal is itself a user-facing change: they had it yesterday, it's gone today. That is worth announcing (and any migration note that comes with it). The JSON schema has no `Removed` group, so **surface it to the user** and let them decide wording and placement rather than silently dropping it or inventing a group. The added-then-removed-same-window case above is the opposite: the user never had it, so nothing is announced.
 
 ## Curation rules
 
@@ -179,7 +182,7 @@ This generalizes the "reverts paired with a re-fix" rule below. It also catches 
 - **Hit-zone / drop-zone / ghost-position adjustments** — fold into the parent drag/drop feature. Never their own bullet.
 - **Internal perf on this week's new work** — perf commits that optimize code shipped earlier in the same week. The user experiences the feature once, smoothly. No separate "Improved" bullet.
 - Reverts paired with a subsequent re-fix in the same week — skip both, keep only the final correct implementation.
-- **Added-then-removed within the window** — any feature introduced and then torn out before HEAD (with or without a replacement). See [Verify the net state](#verify-the-net-state-not-the-commit-stream): it nets to zero, so drop the Added bullet. The exception is a feature that shipped in a *prior* release and is removed this week — that removal is user-facing; surface it.
+- **Added-then-removed within the window** — any feature introduced and then torn out before HEAD (with or without a replacement). See [Verify the net state](#verify-the-net-state-not-the-commit-stream): it nets to zero, so drop the Added bullet. The exception is a feature that shipped in a _prior_ release and is removed this week — that removal is user-facing; surface it.
 - "Update src/..." auto-subject merges (GitHub web-edit artifacts)
 - Revisits: if the same feature is improved multiple times in one week, dedupe to one bullet describing the final state.
 - Duplicates worded differently — drag overlays sticking, drag overlays hijacking lanes, stale drop overlays are all "dragging works better now." One bullet, not three.
@@ -194,14 +197,15 @@ This generalizes the "reverts paired with a re-fix" rule below. It also catches 
 
 Commit messages are dev-speak. The changelog is user-facing. Rewrite every bullet.
 
-| Commit subject | Changelog bullet |
-|---|---|
-| `feat(timeline): add Alt+C as alternate split-at-playhead shortcut` | Split clips at playhead with Alt+C |
-| `perf(filmstrip): fill zoom gaps with cover frame background and full-set fallback` | Smoother filmstrip rendering when zooming the timeline |
-| `fix(preview): retry video with fresh blob URL on stale-blob load errors` | Preview no longer fails when media blobs expire |
-| `feat(storage): migrate to workspace folder via File System Access API` | Projects now live on disk in a folder you choose, not hidden browser storage |
+| Commit subject                                                                      | Changelog bullet                                                             |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `feat(timeline): add Alt+C as alternate split-at-playhead shortcut`                 | Split clips at playhead with Alt+C                                           |
+| `perf(filmstrip): fill zoom gaps with cover frame background and full-set fallback` | Smoother filmstrip rendering when zooming the timeline                       |
+| `fix(preview): retry video with fresh blob URL on stale-blob load errors`           | Preview no longer fails when media blobs expire                              |
+| `feat(storage): migrate to workspace folder via File System Access API`             | Projects now live on disk in a folder you choose, not hidden browser storage |
 
 Rules of thumb:
+
 - Lead with the verb of the user experience, not the code change.
 - Drop internal names (stores, modules, workers) unless the user knows them.
 - If a bullet is only meaningful to developers, drop it.
@@ -212,6 +216,7 @@ Rules of thumb:
 ### Grouping
 
 Within each weekly entry, group into:
+
 - **Added** — new user-facing features
 - **Fixed** — bugs the user actually hit (in shipped builds)
 - **Improved** — performance or polish wins the user would describe in their own words
@@ -225,23 +230,23 @@ Skip any group with zero entries. **It is normal and good for "Improved" to be e
 Matches types in `src/data/changelog-types.ts`:
 
 ```ts
-export type ChangelogGroup = 'added' | 'fixed' | 'improved';
+export type ChangelogGroup = 'added' | 'fixed' | 'improved'
 
 export type ChangelogItem = {
-  title: string;           // ≤12 words, user-facing — must stand alone, no scope tag
-};
+  title: string // ≤12 words, user-facing — must stand alone, no scope tag
+}
 
 export type ChangelogEntry = {
-  version: string;         // "2026.04.13" for releases, "current" for rolling
-  date: string;            // ISO date — Monday for releases, today for current
-  subtitle?: string;       // rare, only for the initial release entry
-  groups: Partial<Record<ChangelogGroup, ChangelogItem[]>>;
-};
+  version: string // "2026.04.13" for releases, "current" for rolling
+  date: string // ISO date — Monday for releases, today for current
+  subtitle?: string // rare, only for the initial release entry
+  groups: Partial<Record<ChangelogGroup, ChangelogItem[]>>
+}
 
 export type ChangelogFile = {
-  current: ChangelogEntry | null;   // in-progress week
-  releases: ChangelogEntry[];       // completed weeks, newest first
-};
+  current: ChangelogEntry | null // in-progress week
+  releases: ChangelogEntry[] // completed weeks, newest first
+}
 ```
 
 The What's New dialog renders one entry per group with title-only bullets — no scope tags, no highlights section. Make every title carry its own context (a user reading it cold should know what changed).
@@ -256,12 +261,15 @@ All notable changes to FreeCut. Versioning follows weekly CalVer: `YYYY.MM.DD` =
 ## [Current] — week of 2026-04-13
 
 ### Added
+
 - ...
 
 ### Fixed
+
 - ...
 
 ## [2026.04.06] — week of 2026-04-06 to 2026-04-12
+
 ...
 ```
 

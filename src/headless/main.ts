@@ -161,7 +161,8 @@ async function waitForFaceApplied(
   const isApplied = (): boolean =>
     GENERICS.every(
       (generic) =>
-        measure(`${weight} 100px "${family}", ${generic}`) !== measure(`${weight} 100px ${generic}`),
+        measure(`${weight} 100px "${family}", ${generic}`) !==
+        measure(`${weight} 100px ${generic}`),
     )
 
   let streak = 0

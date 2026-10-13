@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import {
   canUpscale,
   UPSCALE_MAX_OUTPUT_DIMENSION,

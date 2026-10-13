@@ -78,13 +78,10 @@ function inferUnit(label: string): string {
   return ''
 }
 
-function getPathPropertyValueRange(
-  property: AnimatableProperty,
-): PropertyValueRange | null {
+function getPathPropertyValueRange(property: AnimatableProperty): PropertyValueRange | null {
   const pathVertex = parsePathVertexAnimatableProperty(property)
   if (!pathVertex) return null
-  const isPosition =
-    pathVertex.component === 'positionX' || pathVertex.component === 'positionY'
+  const isPosition = pathVertex.component === 'positionX' || pathVertex.component === 'positionY'
   return {
     property,
     min: isPosition ? 0 : -2,
@@ -94,9 +91,7 @@ function getPathPropertyValueRange(
   }
 }
 
-function getEffectPropertyValueRange(
-  property: AnimatableProperty,
-): PropertyValueRange | null {
+function getEffectPropertyValueRange(property: AnimatableProperty): PropertyValueRange | null {
   const parsed = parseEffectAnimatableProperty(property)
   if (!parsed) return null
 

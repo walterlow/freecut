@@ -1105,7 +1105,13 @@ describe('sidechain ducking', () => {
             order: 0,
             kind: 'audio',
             items: [
-              makeAudioItem({ id: 'sting', trackId: 'root-a1', from: 55, durationInFrames: 20, audioDucking: ducking }),
+              makeAudioItem({
+                id: 'sting',
+                trackId: 'root-a1',
+                from: 55,
+                durationInFrames: 20,
+                audioDucking: ducking,
+              }),
             ],
           }),
         ],
@@ -1119,7 +1125,13 @@ describe('sidechain ducking', () => {
       id: 'sub-equiv',
       name: 'Equivalent',
       items: [
-        makeAudioItem({ id: 'sting', trackId: 'sub-a1', from: 15, durationInFrames: 20, audioDucking: ducking }),
+        makeAudioItem({
+          id: 'sting',
+          trackId: 'sub-a1',
+          from: 15,
+          durationInFrames: 20,
+          audioDucking: ducking,
+        }),
       ],
       tracks: [makeTrack({ id: 'sub-a1', order: 0, kind: 'audio' })],
       transitions: [],

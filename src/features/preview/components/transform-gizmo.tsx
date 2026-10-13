@@ -31,10 +31,7 @@ interface TransformGizmoProps {
   item: TimelineItem
   coordParams: CoordinateParams
   onTransformStart: () => void
-  onTransformEnd: (
-    transform: Transform,
-    operation: 'move' | 'resize' | 'rotate' | 'anchor',
-  ) => void
+  onTransformEnd: (transform: Transform, operation: 'move' | 'resize' | 'rotate' | 'anchor') => void
   onCropEnd: (edge: CropEdge, ratio: number) => void
   /** Whether video is currently playing - gizmo shows at lower opacity during playback */
   isPlaying?: boolean
@@ -80,8 +77,7 @@ export function TransformGizmo({
   const acknowledgedHandoffRef = useRef<number | null>(null)
 
   const isTransformInteracting = activeGizmo?.itemId === item.id
-  const isInteracting =
-    isTransformInteracting || activeCropEdge !== null || isAnchorDragging
+  const isInteracting = isTransformInteracting || activeCropEdge !== null || isAnchorDragging
 
   // Get animated transform using centralized hook
   const { transform: animatedTransform, relativeFrame } = useAnimatedTransform(
@@ -140,9 +136,7 @@ export function TransformGizmo({
       const active = state.activeGizmo
       const handoff = state.presentationHandoff
       const liveTransform =
-        active?.itemId === item.id && active.mode === 'translate'
-          ? state.previewTransform
-          : null
+        active?.itemId === item.id && active.mode === 'translate' ? state.previewTransform : null
       const settlingTransform =
         !liveTransform && handoff?.itemId === item.id && handoff.mode === 'translate'
           ? handoff.finalTransform
@@ -184,10 +178,7 @@ export function TransformGizmo({
     syncTranslatePresentation(useGizmoStore.getState())
   }, [currentTransform, syncTranslatePresentation])
 
-  useEffect(
-    () => useGizmoStore.subscribe(syncTranslatePresentation),
-    [syncTranslatePresentation],
-  )
+  useEffect(() => useGizmoStore.subscribe(syncTranslatePresentation), [syncTranslatePresentation])
 
   const sourceDimensions = useMemo(() => {
     if (item.type !== 'video' && item.type !== 'composition') return null
@@ -279,13 +270,7 @@ export function TransformGizmo({
       }
       const point = toCanvasPoint(e)
       const startTransformSnapshot = { ...currentTransform }
-      const interactionId = startTranslate(
-        item.id,
-        point,
-        currentTransform,
-        strokeWidth,
-        item.type,
-      )
+      const interactionId = startTranslate(item.id, point, currentTransform, strokeWidth, item.type)
       onTransformStart()
       document.body.style.cursor = 'move'
 
@@ -380,13 +365,7 @@ export function TransformGizmo({
       e.preventDefault()
       const point = toCanvasPoint(e)
       const startTransformSnapshot = { ...currentTransform }
-      const interactionId = startRotate(
-        item.id,
-        point,
-        currentTransform,
-        strokeWidth,
-        item.type,
-      )
+      const interactionId = startRotate(item.id, point, currentTransform, strokeWidth, item.type)
       onTransformStart()
       document.body.style.cursor = 'crosshair'
 

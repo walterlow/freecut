@@ -494,14 +494,9 @@ describe('proxyService.loadExistingProxies', () => {
     const { proxyService } = await import('./proxy-service')
     const source = { kind: 'opfs', path: 'content/promoted/data', mimeType: 'video/mp4' } as const
 
-    proxyService.generateProxy(
-      'video-promoted',
-      source,
-      1920,
-      1080,
-      'proxy-video-promoted',
-      { priority: 'background' },
-    )
+    proxyService.generateProxy('video-promoted', source, 1920, 1080, 'proxy-video-promoted', {
+      priority: 'background',
+    })
     await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(1))
     proxyService.generateProxy('video-promoted', source, 1920, 1080, 'proxy-video-promoted')
     proxyService.cancelBackgroundProxy('video-promoted', 'proxy-video-promoted')

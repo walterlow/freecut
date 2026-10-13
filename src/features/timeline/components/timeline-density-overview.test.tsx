@@ -66,18 +66,14 @@ describe('TimelineDensityOverview', () => {
         trackHidden={false}
       />,
     )
-    const buckets = view.container.querySelectorAll<HTMLElement>(
-      '[data-timeline-density-bucket]',
-    )
+    const buckets = view.container.querySelectorAll<HTMLElement>('[data-timeline-density-bucket]')
 
     expect(buckets[0]?.style.left).toContain('--timeline-percent-per-frame')
     expect(buckets[0]?.style.width).toContain('--timeline-percent-per-frame')
   })
 
   it('culls density shells to linked edit preview geometry', () => {
-    useLinkedEditPreviewStore.getState().setUpdates([
-      { id: 'overview-1', durationInFrames: 12 },
-    ])
+    useLinkedEditPreviewStore.getState().setUpdates([{ id: 'overview-1', durationInFrames: 12 }])
 
     const view = render(
       <TimelineDensityOverview
@@ -87,13 +83,9 @@ describe('TimelineDensityOverview', () => {
         trackHidden={false}
       />,
     )
-    const bucket = view.container.querySelector<HTMLElement>(
-      '[data-timeline-density-bucket]',
-    )
+    const bucket = view.container.querySelector<HTMLElement>('[data-timeline-density-bucket]')
 
-    expect(bucket?.style.width).toBe(
-      'calc(12 * var(--timeline-percent-per-frame, 0%))',
-    )
+    expect(bucket?.style.width).toBe('calc(12 * var(--timeline-percent-per-frame, 0%))')
     expect(bucket?.className).toContain('ring-primary')
   })
 

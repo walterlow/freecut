@@ -15,9 +15,12 @@ const properties: AnimatableProperty[] = [
 
 describe('getVisibleMotionPathProperties', () => {
   it('shows only the selected vertex channels while keeping non-path properties', () => {
-    expect(
-      getVisibleMotionPathProperties(properties, { selectedVertexIndices: [1] }),
-    ).toEqual(['x', 'pathVertex:1:positionX', 'pathVertex:1:positionY', 'opacity'])
+    expect(getVisibleMotionPathProperties(properties, { selectedVertexIndices: [1] })).toEqual([
+      'x',
+      'pathVertex:1:positionX',
+      'pathVertex:1:positionY',
+      'opacity',
+    ])
   })
 
   it('never hides keyed or actively graphed path channels', () => {

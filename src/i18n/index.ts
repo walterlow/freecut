@@ -142,9 +142,7 @@ export const i18nReady: Promise<void> = (async () => {
   const persistedLanguage =
     typeof localStorage === 'undefined' ? null : localStorage.getItem(I18N_STORAGE_KEY)
   const detectedLanguage = typeof navigator === 'undefined' ? DEFAULT_LANGUAGE : navigator.language
-  const initial = resolveSupportedLanguage(
-    persistedLanguage ?? detectedLanguage,
-  )
+  const initial = resolveSupportedLanguage(persistedLanguage ?? detectedLanguage)
   if (initial !== DEFAULT_LANGUAGE) await loadLanguageResources(initial)
 })().catch((err) => {
   log.error('Failed to preload language resources', err)

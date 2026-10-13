@@ -3,10 +3,7 @@ import { act, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test'
 import type { ShapeItem } from '@/types/timeline'
 import { useGizmoStore } from '@/features/editor/deps/preview'
-import {
-  useItemsStore,
-  useKeyframesStore,
-} from '@/features/editor/deps/timeline-store'
+import { useItemsStore, useKeyframesStore } from '@/features/editor/deps/timeline-store'
 import { LayoutSection } from './layout-section'
 
 const layoutTestState = vi.hoisted(() => ({
@@ -20,13 +17,9 @@ vi.mock('../components', () => ({
     return <section>{children}</section>
   },
   PropertyRow: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  NumberInput: ({
-    label,
-    value,
-  }: {
-    label?: string
-    value: number | 'mixed'
-  }) => <input readOnly aria-label={`number-${label}`} value={value} />,
+  NumberInput: ({ label, value }: { label?: string; value: number | 'mixed' }) => (
+    <input readOnly aria-label={`number-${label}`} value={value} />
+  ),
   SliderInput: ({ value }: { value: number | 'mixed' }) => (
     <input readOnly aria-label="rotation" value={value} />
   ),
