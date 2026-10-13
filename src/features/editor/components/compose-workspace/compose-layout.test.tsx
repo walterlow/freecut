@@ -47,12 +47,7 @@ vi.mock('./new-composition-dialog', () => ({
     open ? <div data-testid="new-composition-dialog" /> : null,
 }))
 
-function addMotionComposition(
-  id: string,
-  name: string,
-  width = 1920,
-  items: TimelineItem[] = [],
-) {
+function addMotionComposition(id: string, name: string, width = 1920, items: TimelineItem[] = []) {
   useCompositionsStore.getState().addComposition({
     id,
     name,

@@ -1373,13 +1373,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const newerInteractionId = useGizmoStore
       .getState()
-      .startTranslate(
-        'path-1',
-        { x: 20, y: 20 },
-        PATH_ITEM_TRANSFORM,
-        undefined,
-        'shape',
-      )
+      .startTranslate('path-1', { x: 20, y: 20 }, PATH_ITEM_TRANSFORM, undefined, 'shape')
 
     unmount()
 

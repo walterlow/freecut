@@ -32,9 +32,7 @@ export function resolveTimelineMarqueeItems(
     if (id) nativeRects.set(id, readRect(element))
   }
 
-  const surface = container.querySelector<HTMLElement>(
-    '[data-timeline-committed-surface="tracks"]',
-  )
+  const surface = container.querySelector<HTMLElement>('[data-timeline-committed-surface="tracks"]')
   const trackGeometry = new Map<string, { rowRect: Rect; contentRect: Rect }>()
   if (surface) {
     for (const element of surface.querySelectorAll<HTMLElement>('[data-track-id]')) {

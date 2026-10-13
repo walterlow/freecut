@@ -35,9 +35,9 @@ export function useGroupExpansion({
   initialExpandedGroups,
   onExpandedGroupsChange,
 }: UseGroupExpansionOptions): UseGroupExpansionReturn {
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    () => ({ ...initialExpandedGroups }),
-  )
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => ({
+    ...initialExpandedGroups,
+  }))
 
   useEffect(() => {
     onExpandedGroupsChange?.(expandedGroups)

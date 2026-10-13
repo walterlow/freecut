@@ -200,9 +200,7 @@ function ChangelogPage() {
           <div className="mt-16 flex flex-col items-start justify-between gap-5 rounded-xl border border-border bg-card px-6 py-7 sm:flex-row sm:items-center sm:px-8">
             <div>
               <h2 className="text-xl font-semibold">{t('changelog.ctaTitle')}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {t('changelog.ctaDescription')}
-              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{t('changelog.ctaDescription')}</p>
             </div>
             <Button asChild className="gap-2">
               <Link to="/projects">

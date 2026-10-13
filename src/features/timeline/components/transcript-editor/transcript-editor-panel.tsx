@@ -712,61 +712,64 @@ export function TranscriptEditorPanel({ active }: TranscriptEditorPanelProps) {
     return status === 'loading' || status === 'transcribing'
   })
 
-  const handleTranscribe = useCallback((values: TranscribeDialogValues) => {
-    const targets = uniqueMediaIds.filter((id) => {
-      const status = mediaState[id]?.status
-      return status === 'needs' || status === 'error'
-    })
-    if (targets.length === 0) return
+  const handleTranscribe = useCallback(
+    (values: TranscribeDialogValues) => {
+      const targets = uniqueMediaIds.filter((id) => {
+        const status = mediaState[id]?.status
+        return status === 'needs' || status === 'error'
+      })
+      if (targets.length === 0) return
 
-    setTranscribeDialogOpen(false)
+      setTranscribeDialogOpen(false)
 
-    for (const id of targets) requestedRef.current.add(id)
-    setMediaState((prev) => {
-      const next = { ...prev }
-      for (const id of targets) next[id] = { status: 'transcribing' }
-      return next
-    })
+      for (const id of targets) requestedRef.current.add(id)
+      setMediaState((prev) => {
+        const next = { ...prev }
+        for (const id of targets) next[id] = { status: 'transcribing' }
+        return next
+      })
 
-    void Promise.all(
-      targets.map(async (mediaId) => {
-        try {
-          const result = await runMediaTranscriptionJob(mediaId, {
-            ...values,
-            onModelFallback: () => {
-              toast.info(t('transcript.largeTurboFallback'))
-            },
-          })
-          if (!mountedRef.current) return
-          if (result.status === 'cancelled') {
-            setMediaState((prev) => ({ ...prev, [mediaId]: { status: 'needs' } }))
-            return
-          }
-          const { transcript } = result
-          setMediaState((prev) => ({
-            ...prev,
-            [mediaId]: hasWordTimings(transcript)
-              ? { status: 'ready', transcript }
-              : { status: 'needs' },
-          }))
-        } catch (error) {
-          logger.warn('Transcription failed', { mediaId, error })
-          const errorMessage = isTranscriptionOutOfMemoryError(error)
-            ? TRANSCRIPTION_OOM_HINT
-            : error instanceof Error && error.message.trim().length > 0
-              ? error.message
-              : t('transcript.toastTranscribeFailed')
-          if (mountedRef.current) {
+      void Promise.all(
+        targets.map(async (mediaId) => {
+          try {
+            const result = await runMediaTranscriptionJob(mediaId, {
+              ...values,
+              onModelFallback: () => {
+                toast.info(t('transcript.largeTurboFallback'))
+              },
+            })
+            if (!mountedRef.current) return
+            if (result.status === 'cancelled') {
+              setMediaState((prev) => ({ ...prev, [mediaId]: { status: 'needs' } }))
+              return
+            }
+            const { transcript } = result
             setMediaState((prev) => ({
               ...prev,
-              [mediaId]: { status: 'error', errorMessage },
+              [mediaId]: hasWordTimings(transcript)
+                ? { status: 'ready', transcript }
+                : { status: 'needs' },
             }))
+          } catch (error) {
+            logger.warn('Transcription failed', { mediaId, error })
+            const errorMessage = isTranscriptionOutOfMemoryError(error)
+              ? TRANSCRIPTION_OOM_HINT
+              : error instanceof Error && error.message.trim().length > 0
+                ? error.message
+                : t('transcript.toastTranscribeFailed')
+            if (mountedRef.current) {
+              setMediaState((prev) => ({
+                ...prev,
+                [mediaId]: { status: 'error', errorMessage },
+              }))
+            }
+            toast.error(errorMessage)
           }
-          toast.error(errorMessage)
-        }
-      }),
-    )
-  }, [uniqueMediaIds, mediaState, t])
+        }),
+      )
+    },
+    [uniqueMediaIds, mediaState, t],
+  )
 
   const transcriptionError = useMemo(
     () =>

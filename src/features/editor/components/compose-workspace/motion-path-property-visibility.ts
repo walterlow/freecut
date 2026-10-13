@@ -16,8 +16,7 @@ function getKeyedPathProperties(itemKeyframes: ItemKeyframes | undefined) {
   return new Set<AnimatableProperty>(
     (itemKeyframes?.properties ?? [])
       .filter(
-        (entry) =>
-          entry.keyframes.length > 0 && isPathVertexAnimatableProperty(entry.property),
+        (entry) => entry.keyframes.length > 0 && isPathVertexAnimatableProperty(entry.property),
       )
       .map((entry) => entry.property),
   )
@@ -67,7 +66,6 @@ export function getVisibleMotionPathProperties(
   }
 
   return properties.filter(
-    (property) =>
-      !isPathVertexAnimatableProperty(property) || visiblePathProperties.has(property),
+    (property) => !isPathVertexAnimatableProperty(property) || visiblePathProperties.has(property),
   )
 }

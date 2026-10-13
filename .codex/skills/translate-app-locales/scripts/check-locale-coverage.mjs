@@ -48,14 +48,13 @@ let failures = 0
 const sourceBase = path.join(options.locales, `${options.source}.json`)
 const targetBase = path.join(options.locales, `${options.target}.json`)
 
-failures += compareTrees(
-  `base ${options.target}`,
-  readJson(sourceBase),
-  readJson(targetBase),
-)
+failures += compareTrees(`base ${options.target}`, readJson(sourceBase), readJson(targetBase))
 
 if (options.partials && fs.existsSync(options.partials)) {
-  const files = fs.readdirSync(options.partials).filter((file) => file.endsWith('.json')).sort()
+  const files = fs
+    .readdirSync(options.partials)
+    .filter((file) => file.endsWith('.json'))
+    .sort()
   for (const file of files) {
     const json = readJson(path.join(options.partials, file))
     failures += compareTrees(

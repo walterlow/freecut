@@ -83,12 +83,11 @@ export function useAdaptiveWaveformPixelsPerSecond({
   phaseKey?: string
   enabled?: boolean
 }): number {
-  const initialRenderPixelsPerSecond = enabled && useZoomStore.getState().isZoomInteracting
-    ? useZoomStore.getState().pixelsPerSecond
-    : pixelsPerSecond
-  const [renderPixelsPerSecond, setRenderPixelsPerSecond] = useState(
-    initialRenderPixelsPerSecond,
-  )
+  const initialRenderPixelsPerSecond =
+    enabled && useZoomStore.getState().isZoomInteracting
+      ? useZoomStore.getState().pixelsPerSecond
+      : pixelsPerSecond
+  const [renderPixelsPerSecond, setRenderPixelsPerSecond] = useState(initialRenderPixelsPerSecond)
   const lastCommitAtRef = useRef(0)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const redrawIntervalMs = getWaveformZoomRedrawIntervalMs(activeTileCount)
@@ -113,9 +112,7 @@ export function useAdaptiveWaveformPixelsPerSecond({
     const commit = () => {
       if (cancelled) return
       lastCommitAtRef.current = nowMs()
-      setRenderPixelsPerSecond(
-        enabled ? useZoomStore.getState().pixelsPerSecond : pixelsPerSecond,
-      )
+      setRenderPixelsPerSecond(enabled ? useZoomStore.getState().pixelsPerSecond : pixelsPerSecond)
     }
 
     const commitAfterLiveLayout = () => {

@@ -38,10 +38,7 @@ import { useMarkersStore } from './markers-store'
 import { useTimelineSettingsStore } from './timeline-settings-store'
 import { ROOT_HISTORY_CONTEXT, useTimelineCommandStore } from './timeline-command-store'
 import { useCompositionsStore, type SubComposition } from './compositions-store'
-import {
-  getActiveTabId,
-  useCompositionNavigationStore,
-} from './composition-navigation-store'
+import { getActiveTabId, useCompositionNavigationStore } from './composition-navigation-store'
 import { useSequencesStore } from './sequences-store'
 import { getProject, updateProject, saveProjectThumbnail } from '@/infrastructure/storage'
 import {
@@ -785,8 +782,7 @@ function captureTimelinePersistenceSnapshot(): TimelinePersistenceSnapshot {
     compositions,
     currentFrame: heldRoot ? heldRoot.currentFrame : playback.currentFrame,
     zoomLevel: heldRoot?.zoomLevel ?? rootView?.zoomLevel ?? zoom.level,
-    scrollPosition:
-      heldRoot?.scrollPosition ?? rootView?.scrollPosition ?? settings.scrollPosition,
+    scrollPosition: heldRoot?.scrollPosition ?? rootView?.scrollPosition ?? settings.scrollPosition,
     busAudioEq: heldRoot ? heldRoot.busAudioEq : playback.busAudioEq,
     masterBusDb: playback.masterBusDb,
     markers: heldRoot ? heldRoot.markers : markers.markers,
@@ -1230,10 +1226,7 @@ function getTimelineLoadKey(projectId: string, options: LoadTimelineOptions): st
   return JSON.stringify([projectId, options.allowProjectUpgrade === true])
 }
 
-export function loadTimeline(
-  projectId: string,
-  options: LoadTimelineOptions = {},
-): Promise<void> {
+export function loadTimeline(projectId: string, options: LoadTimelineOptions = {}): Promise<void> {
   const loadKey = getTimelineLoadKey(projectId, options)
   const inFlightLoad = inFlightTimelineLoads.get(loadKey)
   if (inFlightLoad) return inFlightLoad

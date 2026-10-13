@@ -1583,13 +1583,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     linkedTimelineViewportWidth !== undefined &&
     linkedTimelineViewportWidth > 0
   const timelineCellBorderWidth =
-    presentation === 'classic'
-      ? hasLinkedTimelineAxis
-        ? 0
-        : 1
-      : presentation === 'lanes'
-        ? 1
-        : 0
+    presentation === 'classic' ? (hasLinkedTimelineAxis ? 0 : 1) : presentation === 'lanes' ? 1 : 0
   const effectiveTimelineWidth = Math.max(
     hasLinkedTimelineAxis
       ? linkedTimelineViewportWidth
@@ -1692,12 +1686,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   }, [affectedFrameRange, effectiveTimelineWidth, frameToX])
   const sharedGridFrameToX = useCallback(
     (frame: number) =>
-      getFrameAxisX(
-        frame,
-        viewport,
-        effectiveTimelineWidth + timelineCellBorderWidth,
-        0,
-      ) - timelineCellBorderWidth,
+      getFrameAxisX(frame, viewport, effectiveTimelineWidth + timelineCellBorderWidth, 0) -
+      timelineCellBorderWidth,
     [effectiveTimelineWidth, timelineCellBorderWidth, viewport],
   )
   const getRenderedKeyframeX = useCallback(
@@ -1947,8 +1937,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     if (timelineGridDivisions && timelineGridDivisions > 0) {
       return Array.from(
         { length: timelineGridDivisions + 1 },
-        (_, index) =>
-          viewport.startFrame + (index / timelineGridDivisions) * frameRange,
+        (_, index) => viewport.startFrame + (index / timelineGridDivisions) * frameRange,
       )
     }
     const step = getNiceTickStep(frameRange)

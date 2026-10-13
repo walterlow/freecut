@@ -72,8 +72,9 @@ describe('applyAnimationPreset', () => {
     expect(result.addedEffects).toBe(0)
     expect(result.appliedProcedural).toBe(0)
     expect(getKeyframes('a', 'x').map((k) => k.frame)).toEqual([0, 30])
-    expect(getKeyframes('a', 'x').every((keyframe) => keyframe.source?.presetId === 'preset-1'))
-      .toBe(true)
+    expect(
+      getKeyframes('a', 'x').every((keyframe) => keyframe.source?.presetId === 'preset-1'),
+    ).toBe(true)
 
     // Single undo step removes the whole applied animation.
     useTimelineCommandStore.getState().undo()
@@ -132,9 +133,7 @@ describe('applyAnimationPreset', () => {
               {
                 property: 'x',
                 blend: 'add',
-                keyframes: [
-                  { id: 'saved-layer-key', frame: 0, value: -100, easing: 'ease-out' },
-                ],
+                keyframes: [{ id: 'saved-layer-key', frame: 0, value: -100, easing: 'ease-out' }],
               },
             ],
           },
@@ -222,9 +221,9 @@ describe('applyAnimationPreset', () => {
   })
 
   it('merge keeps an authored key when the preset lands on the same frame', () => {
-    useKeyframesStore.getState()._addKeyframes([
-      { itemId: 'a', property: 'x', frame: 0, value: 42, easing: 'hold' },
-    ])
+    useKeyframesStore
+      .getState()
+      ._addKeyframes([{ itemId: 'a', property: 'x', frame: 0, value: 42, easing: 'hold' }])
 
     const result = applyAnimationPreset('a', makePreset(), 0, { replace: false })
 
@@ -388,17 +387,15 @@ describe('applyAnimationPreset', () => {
 
   it('removes one generated application without touching manual keys', () => {
     applyAnimationPreset('a', makePreset(), 0, { replace: false })
-    useKeyframesStore.getState()._addKeyframes([
-      { itemId: 'a', property: 'x', frame: 70, value: 12, easing: 'linear' },
-    ])
+    useKeyframesStore
+      .getState()
+      ._addKeyframes([{ itemId: 'a', property: 'x', frame: 70, value: 12, easing: 'linear' }])
     const applicationId = getKeyframes('a', 'x').find((keyframe) => keyframe.source)?.source
       ?.applicationId
     expect(applicationId).toBeDefined()
 
     removePresetKeyframeApplication('a', applicationId!)
 
-    expect(getKeyframes('a', 'x')).toMatchObject([
-      { frame: 70, value: 12, source: undefined },
-    ])
+    expect(getKeyframes('a', 'x')).toMatchObject([{ frame: 70, value: 12, source: undefined }])
   })
 })

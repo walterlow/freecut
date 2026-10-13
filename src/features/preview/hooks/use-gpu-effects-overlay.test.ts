@@ -575,18 +575,16 @@ describe('bounded continuous overlay routing', () => {
     })
 
     expect(
-      shouldForceContinuousPreviewOverlayInWindow(
-        [effected],
-        0,
-        { startFrame: 497, endFrameExclusive: 509 },
-      ),
+      shouldForceContinuousPreviewOverlayInWindow([effected], 0, {
+        startFrame: 497,
+        endFrameExclusive: 509,
+      }),
     ).toBe(true)
     expect(
-      shouldForceContinuousPreviewOverlayInWindow(
-        [effected],
-        0,
-        { startFrame: 0, endFrameExclusive: 9 },
-      ),
+      shouldForceContinuousPreviewOverlayInWindow([effected], 0, {
+        startFrame: 0,
+        endFrameExclusive: 9,
+      }),
     ).toBe(false)
   })
 
@@ -598,18 +596,16 @@ describe('bounded continuous overlay routing', () => {
     })
 
     expect(
-      shouldForceContinuousPreviewOverlayInWindow(
-        [effected],
-        0,
-        { startFrame: 499, endFrameExclusive: 511 },
-      ),
+      shouldForceContinuousPreviewOverlayInWindow([effected], 0, {
+        startFrame: 499,
+        endFrameExclusive: 511,
+      }),
     ).toBe(true)
     expect(
-      shouldForceContinuousPreviewOverlayInWindow(
-        [effected],
-        0,
-        { startFrame: 500, endFrameExclusive: 512 },
-      ),
+      shouldForceContinuousPreviewOverlayInWindow([effected], 0, {
+        startFrame: 500,
+        endFrameExclusive: 512,
+      }),
     ).toBe(false)
   })
 })

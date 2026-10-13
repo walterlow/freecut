@@ -175,12 +175,14 @@ describe('linked edit tools', () => {
   })
 
   it('clamps a linked end trim to the closest neighbor on every companion track', () => {
-    useItemsStore.getState().setItems([
-      makeVideoItem(),
-      makeAudioItem(),
-      makeVideoItem({ id: 'video-next', linkedGroupId: undefined, from: 100 }),
-      makeAudioItem({ id: 'audio-next', linkedGroupId: undefined, from: 70 }),
-    ])
+    useItemsStore
+      .getState()
+      .setItems([
+        makeVideoItem(),
+        makeAudioItem(),
+        makeVideoItem({ id: 'video-next', linkedGroupId: undefined, from: 100 }),
+        makeAudioItem({ id: 'audio-next', linkedGroupId: undefined, from: 70 }),
+      ])
 
     trimItemEnd('video-1', 30)
 

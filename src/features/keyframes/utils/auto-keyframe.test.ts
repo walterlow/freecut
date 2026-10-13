@@ -93,21 +93,13 @@ describe('getVectorAutoKeyframeOperation', () => {
       vectorProperties: [
         {
           property: 'position',
-          keyframes: [
-            { id: 'position-1', frame: 0, value: { x: 10, y: 20 }, easing: 'linear' },
-          ],
+          keyframes: [{ id: 'position-1', frame: 0, value: { x: 10, y: 20 }, easing: 'linear' }],
         },
       ],
     }
 
     expect(
-      getVectorAutoKeyframeOperation(
-        item,
-        itemKeyframes,
-        'position',
-        { x: 100, y: 200 },
-        15,
-      ),
+      getVectorAutoKeyframeOperation(item, itemKeyframes, 'position', { x: 100, y: 200 }, 15),
     ).toEqual({
       type: 'vector-add',
       itemId: item.id,
@@ -125,21 +117,13 @@ describe('getVectorAutoKeyframeOperation', () => {
       vectorProperties: [
         {
           property: 'scale',
-          keyframes: [
-            { id: 'scale-1', frame: 5, value: { x: 100, y: 100 }, easing: 'linear' },
-          ],
+          keyframes: [{ id: 'scale-1', frame: 5, value: { x: 100, y: 100 }, easing: 'linear' }],
         },
       ],
     }
 
     expect(
-      getVectorAutoKeyframeOperation(
-        item,
-        itemKeyframes,
-        'scale',
-        { x: 125, y: 80 },
-        15,
-      ),
+      getVectorAutoKeyframeOperation(item, itemKeyframes, 'scale', { x: 125, y: 80 }, 15),
     ).toEqual({
       type: 'vector-update',
       itemId: item.id,

@@ -152,15 +152,11 @@ describe('gizmo transform commits', () => {
       vectorProperties: [
         {
           property: 'position',
-          keyframes: [
-            { id: 'p0', frame: 0, value: { x: 100, y: 50 }, easing: 'linear' },
-          ],
+          keyframes: [{ id: 'p0', frame: 0, value: { x: 100, y: 50 }, easing: 'linear' }],
         },
         {
           property: 'scale',
-          keyframes: [
-            { id: 's0', frame: 0, value: { x: 100, y: 100 }, easing: 'linear' },
-          ],
+          keyframes: [{ id: 's0', frame: 0, value: { x: 100, y: 100 }, easing: 'linear' }],
         },
       ],
     }

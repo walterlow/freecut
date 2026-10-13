@@ -285,10 +285,5 @@ export const AlignmentToolbar = memo(function AlignmentToolbar({
   projectSize,
 }: AlignmentToolbarProps) {
   const itemsSnapshot = useTimelineStore((state) => state.items)
-  return (
-    <DeferredAlignmentToolbar
-      itemsSnapshot={itemsSnapshot}
-      projectSize={projectSize}
-    />
-  )
+  return <DeferredAlignmentToolbar itemsSnapshot={itemsSnapshot} projectSize={projectSize} />
 })

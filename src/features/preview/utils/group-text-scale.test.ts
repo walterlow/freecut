@@ -6,10 +6,7 @@ import { useTransitionsStore } from '@/features/preview/deps/timeline-store'
 import type { ItemKeyframes } from '@/types/keyframe'
 import type { TextItem, TimelineItem, VideoItem } from '@/types/timeline'
 import type { Transform } from '../types/gizmo'
-import {
-  buildGroupScaledTextProperties,
-  buildGroupTextScaleCommit,
-} from './group-text-scale'
+import { buildGroupScaledTextProperties, buildGroupTextScaleCommit } from './group-text-scale'
 
 const transform = (width: number, height: number): Transform => ({
   x: 0,

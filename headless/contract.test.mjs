@@ -40,7 +40,12 @@ const samples = {
     alignment: 0.4,
     properties: { intensity: 2 },
   },
-  updateTransition: { op: 'updateTransition', id: 't', presentation: 'wipe', direction: 'from-top' },
+  updateTransition: {
+    op: 'updateTransition',
+    id: 't',
+    presentation: 'wipe',
+    direction: 'from-top',
+  },
   removeTransition: { op: 'removeTransition', id: 't' },
   addTrack: { op: 'addTrack', kind: 'audio', order: 2 },
   addClip: { op: 'addClip', mediaId: 'm', from: 0 },
@@ -149,13 +154,15 @@ test('frame and layout requests reject invalid targets and frame options', () =>
     { project: 'p', height: 10.5 },
     { project: 'p', projectObject: {}, frame: 0 },
     { frame: 0 },
-  ]) assert.equal(frameRequestSchema.safeParse(invalid).success, false, JSON.stringify(invalid))
+  ])
+    assert.equal(frameRequestSchema.safeParse(invalid).success, false, JSON.stringify(invalid))
 
   for (const invalid of [
     { project: 'p', frame: '12' },
     { project: 'p', at: '1.5' },
     { project: 'p', format: 'png' },
-  ]) assert.equal(layoutRequestSchema.safeParse(invalid).success, false, JSON.stringify(invalid))
+  ])
+    assert.equal(layoutRequestSchema.safeParse(invalid).success, false, JSON.stringify(invalid))
 })
 
 test('validation errors and capabilities are machine-readable and bounded', () => {

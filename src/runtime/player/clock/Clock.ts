@@ -281,10 +281,7 @@ export class Clock {
     // Restart from the opposite boundary when replaying past the active edge.
     if (this._playbackRate >= 0 && this._currentFrame >= this.actualLastFrame) {
       this._currentFrame = this.actualFirstFrame
-    } else if (
-      this._playbackRate < 0 &&
-      this._currentFrame <= this.actualFirstFrame
-    ) {
+    } else if (this._playbackRate < 0 && this._currentFrame <= this.actualFirstFrame) {
       this._currentFrame = this.actualLastFrame
     }
 

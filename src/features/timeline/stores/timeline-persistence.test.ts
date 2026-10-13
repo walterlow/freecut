@@ -120,12 +120,11 @@ describe('timeline project hydration', () => {
 
     await hydrateTimelineStoresFromProject(project)
 
-    const hydratedComposition =
-      useCompositionsStore.getState().compositionById['motion-comp']
+    const hydratedComposition = useCompositionsStore.getState().compositionById['motion-comp']
     expect(hydratedComposition?.durationInFrames).toBe(100)
-    expect(
-      hydratedComposition?.items.map((item) => item.from + item.durationInFrames),
-    ).toEqual([130])
+    expect(hydratedComposition?.items.map((item) => item.from + item.durationInFrames)).toEqual([
+      130,
+    ])
   })
 
   it('preserves versioned RGBA keyframe numbers during project hydration', async () => {

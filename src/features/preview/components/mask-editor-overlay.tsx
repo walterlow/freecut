@@ -332,8 +332,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const currentFrame = usePlaybackStore.getState().currentFrame
       const itemKeyframes = useKeyframesStore.getState().keyframesByItemId[item.id]
       return (
-        resolveAnimatedShapeItem(item, itemKeyframes, currentFrame - item.from).pathVertices ??
-        null
+        resolveAnimatedShapeItem(item, itemKeyframes, currentFrame - item.from).pathVertices ?? null
       )
     }
     return null
@@ -1307,31 +1306,34 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     }
   }, [])
 
-  const scheduleEditCommitCleanup = useCallback((expectedInteractionId?: number) => {
-    for (const id of pendingCleanupRafIdsRef.current) {
-      cancelAnimationFrame(id)
-    }
-    pendingCleanupRafIdsRef.current = []
-    const scheduledGeneration = editInteractionGenerationRef.current
+  const scheduleEditCommitCleanup = useCallback(
+    (expectedInteractionId?: number) => {
+      for (const id of pendingCleanupRafIdsRef.current) {
+        cancelAnimationFrame(id)
+      }
+      pendingCleanupRafIdsRef.current = []
+      const scheduledGeneration = editInteractionGenerationRef.current
 
-    const firstFrameId = requestAnimationFrame(() => {
-      const secondFrameId = requestAnimationFrame(() => {
-        if (editInteractionGenerationRef.current !== scheduledGeneration) return
-        pendingCleanupRafIdsRef.current = []
-        setCommittedEditSnapshot(null)
-        if (expectedInteractionId !== undefined) {
-          clearInteraction(expectedInteractionId)
-          if (maskOwnedInteractionIdRef.current === expectedInteractionId) {
-            maskOwnedInteractionIdRef.current = null
+      const firstFrameId = requestAnimationFrame(() => {
+        const secondFrameId = requestAnimationFrame(() => {
+          if (editInteractionGenerationRef.current !== scheduledGeneration) return
+          pendingCleanupRafIdsRef.current = []
+          setCommittedEditSnapshot(null)
+          if (expectedInteractionId !== undefined) {
+            clearInteraction(expectedInteractionId)
+            if (maskOwnedInteractionIdRef.current === expectedInteractionId) {
+              maskOwnedInteractionIdRef.current = null
+            }
           }
-        }
-        endDrag()
+          endDrag()
+        })
+        pendingCleanupRafIdsRef.current = [firstFrameId, secondFrameId]
       })
-      pendingCleanupRafIdsRef.current = [firstFrameId, secondFrameId]
-    })
 
-    pendingCleanupRafIdsRef.current = [firstFrameId]
-  }, [clearInteraction, endDrag])
+      pendingCleanupRafIdsRef.current = [firstFrameId]
+    },
+    [clearInteraction, endDrag],
+  )
 
   const buildMaskTransformPersistence = useCallback(
     (

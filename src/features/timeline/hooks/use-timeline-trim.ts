@@ -280,12 +280,7 @@ export function useTimelineTrim(
       let constraintLabel: string | null = null
       const trimConstraintItems = isRollingEdit || isRippleEdit ? [currentItem] : normalTrimItems
       for (const trimConstraintItem of trimConstraintItems) {
-        const { clampedAmount } = clampTrimAmount(
-          trimConstraintItem,
-          handle!,
-          deltaFrames,
-          fps,
-        )
+        const { clampedAmount } = clampTrimAmount(trimConstraintItem, handle!, deltaFrames, fps)
         if (clampedAmount !== deltaFrames) {
           isConstrained = true
           constraintLabel = 'no handle'
@@ -874,10 +869,9 @@ export function useTimelineTrim(
           handle === 'start' ? trimmedItem.from : trimmedItem.from + trimmedItem.durationInFrames
         return areTrimEdgesAligned(anchorTrimEdge, trimmedItemEdge)
       })
-      const trimmedItemIds =
-        verticallyAlignedTrimItemIds.includes(currentItem.id)
-          ? verticallyAlignedTrimItemIds
-          : [currentItem.id]
+      const trimmedItemIds = verticallyAlignedTrimItemIds.includes(currentItem.id)
+        ? verticallyAlignedTrimItemIds
+        : [currentItem.id]
 
       magneticSnapTargetsRef.current = getMagneticSnapTargets()
       setDragState({

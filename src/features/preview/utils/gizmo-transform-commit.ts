@@ -1,6 +1,4 @@
-import type {
-  AutoKeyframeOperation,
-} from '@/features/preview/deps/keyframes'
+import type { AutoKeyframeOperation } from '@/features/preview/deps/keyframes'
 import {
   getAutoKeyframeOperation,
   getVectorAutoKeyframeOperation,
@@ -9,11 +7,7 @@ import {
 } from '@/features/preview/deps/keyframes'
 import type { ItemKeyframes, TransformAnimatableProperty } from '@/types/keyframe'
 import type { TimelineItem } from '@/types/timeline'
-import type {
-  CanvasSettings,
-  ResolvedTransform,
-  TransformProperties,
-} from '@/types/transform'
+import type { CanvasSettings, ResolvedTransform, TransformProperties } from '@/types/transform'
 import { worldToLocalTransform } from '@/shared/utils/transform-parenting'
 import { resolveItemTransformAtFrame } from '@/features/preview/deps/composition-runtime'
 
@@ -61,16 +55,12 @@ export function resolveEditableGizmoTransform(params: {
     params.item.transformParent,
     params.parentVisualTransform,
   )
-  const withoutModifiers = removeMotionModifiers(
-    localVisual,
-    params.item.motionModifiers,
-    {
-      frame: params.relativeFrame,
-      fps: params.fps,
-      frameWidth: params.frameWidth,
-      frameHeight: params.frameHeight,
-    },
-  )
+  const withoutModifiers = removeMotionModifiers(localVisual, params.item.motionModifiers, {
+    frame: params.relativeFrame,
+    fps: params.fps,
+    frameWidth: params.frameWidth,
+    frameHeight: params.frameHeight,
+  })
   return removeMotionAnimationLayers(
     withoutModifiers,
     params.item.motionLayers,
@@ -205,9 +195,7 @@ export function buildGizmoAnchorCommit(params: {
     )
     if (!lane) continue
     const components =
-      vectorProperty === 'position'
-        ? (['x', 'y'] as const)
-        : (['anchorX', 'anchorY'] as const)
+      vectorProperty === 'position' ? (['x', 'y'] as const) : (['anchorX', 'anchorY'] as const)
     const operation = getVectorAutoKeyframeOperation(
       params.item,
       params.itemKeyframes,

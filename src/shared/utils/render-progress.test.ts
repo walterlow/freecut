@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import { RenderProgress } from './render-progress'
 
 /** Drive `frames` ticks at a steady `msPerFrame`, with a constant source gap. */

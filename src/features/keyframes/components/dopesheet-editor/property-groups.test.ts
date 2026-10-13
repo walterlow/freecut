@@ -67,12 +67,7 @@ describe('getPropertyAccordionGroups', () => {
       {
         id: 'textAppearance',
         label: 'Text Appearance',
-        properties: [
-          'textShadowOffsetX',
-          'textShadowOffsetY',
-          'textShadowBlur',
-          'strokeWidth',
-        ],
+        properties: ['textShadowOffsetX', 'textShadowOffsetY', 'textShadowBlur', 'strokeWidth'],
       },
     ])
   })
@@ -81,12 +76,7 @@ describe('getPropertyAccordionGroups', () => {
     const blurRadius = buildEffectAnimatableProperty('gpu-gaussian-blur', 'blur-1', 'radius')
 
     expect(
-      getPropertyAccordionGroups([
-        'cropSoftness',
-        'volume',
-        'trimPathEnd',
-        blurRadius,
-      ]),
+      getPropertyAccordionGroups(['cropSoftness', 'volume', 'trimPathEnd', blurRadius]),
     ).toEqual([
       {
         id: 'crop',

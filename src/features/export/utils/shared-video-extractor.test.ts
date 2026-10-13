@@ -82,13 +82,15 @@ describe('SharedVideoExtractorPool', () => {
     pool.getOrCreateItemExtractor('item-3', 'blob:third')
 
     expect(extractorState.instances).toHaveLength(0)
-    expect(pool.getStats()).toEqual(expect.objectContaining({
-      registeredBindings: 3,
-      sourceStates: 3,
-      initializedSources: 0,
-      lanes: 0,
-      activeOperations: 0,
-    }))
+    expect(pool.getStats()).toEqual(
+      expect.objectContaining({
+        registeredBindings: 3,
+        sourceStates: 3,
+        initializedSources: 0,
+        lanes: 0,
+        activeOperations: 0,
+      }),
+    )
 
     await first.init()
 

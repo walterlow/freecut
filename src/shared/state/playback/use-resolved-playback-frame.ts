@@ -35,12 +35,6 @@ function getDisabledPlaybackFrameSnapshot(): number {
  * presenting an older `displayedFrame`.
  */
 export function useResolvedPlaybackFrame(enabled = true): number {
-  const getSnapshot = enabled
-    ? getResolvedPlaybackFrameSnapshot
-    : getDisabledPlaybackFrameSnapshot
-  return useSyncExternalStore(
-    subscribeResolvedPlaybackFrame,
-    getSnapshot,
-    getSnapshot,
-  )
+  const getSnapshot = enabled ? getResolvedPlaybackFrameSnapshot : getDisabledPlaybackFrameSnapshot
+  return useSyncExternalStore(subscribeResolvedPlaybackFrame, getSnapshot, getSnapshot)
 }

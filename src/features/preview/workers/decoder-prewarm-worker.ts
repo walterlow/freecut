@@ -266,11 +266,10 @@ function resetSampleIterator(state: ExtractorState, startTimestamp: number): voi
   // decoding a range. Starting at the requested presentation timestamp keeps
   // that necessary GOP decode inside the sink without yielding a keyframe-to-
   // target runway that this worker would only close and discard.
-  state.sampleIterator = state.sink.samples(Math.max(0, startTimestamp), Infinity) as AsyncGenerator<
-    WorkerSample,
-    void,
-    unknown
-  >
+  state.sampleIterator = state.sink.samples(
+    Math.max(0, startTimestamp),
+    Infinity,
+  ) as AsyncGenerator<WorkerSample, void, unknown>
   state.iteratorDone = false
   state.lastRequestedTimestamp = null
 }
@@ -624,10 +623,7 @@ self.onmessage = async (event: MessageEvent) => {
     if (src) {
       activePreviewGenerationBySrc.set(
         src,
-        Math.max(
-          activePreviewGenerationBySrc.get(src) ?? 0,
-          Number(msg.generation) || 0,
-        ),
+        Math.max(activePreviewGenerationBySrc.get(src) ?? 0, Number(msg.generation) || 0),
       )
     }
     return
@@ -687,10 +683,7 @@ self.onmessage = async (event: MessageEvent) => {
   if (isActivePreviewRequest) {
     activePreviewGenerationBySrc.set(
       msg.src,
-      Math.max(
-        activePreviewGenerationBySrc.get(msg.src) ?? 0,
-        Number(msg.generation) || 0,
-      ),
+      Math.max(activePreviewGenerationBySrc.get(msg.src) ?? 0, Number(msg.generation) || 0),
     )
   }
 

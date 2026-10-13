@@ -9,7 +9,11 @@ export { useReverseConformDialogStore } from '@/features/timeline/stores/reverse
 export { useSilenceRemovalDialogStore } from '@/features/timeline/stores/silence-removal-dialog-store'
 
 export const importTimeline = () => import('@/features/timeline/components/timeline')
-export const importBentoLayoutDialog = () => import('@/features/timeline/components/bento-layout-dialog')
-export const importFillerRemovalDialog = () => import('@/features/timeline/components/filler-removal-dialog')
-export const importReverseConformDialog = () => import('@/features/timeline/components/reverse-conform-dialog')
-export const importSilenceRemovalDialog = () => import('@/features/timeline/components/silence-removal-dialog')
+export const importBentoLayoutDialog = () =>
+  import('@/features/timeline/components/bento-layout-dialog')
+export const importFillerRemovalDialog = () =>
+  import('@/features/timeline/components/filler-removal-dialog')
+export const importReverseConformDialog = () =>
+  import('@/features/timeline/components/reverse-conform-dialog')
+export const importSilenceRemovalDialog = () =>
+  import('@/features/timeline/components/silence-removal-dialog')

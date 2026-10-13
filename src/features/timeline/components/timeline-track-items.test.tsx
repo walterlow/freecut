@@ -209,9 +209,10 @@ describe('TimelineTrackItems stable DOM renderer', () => {
         isZoomInteracting: true,
       })
     })
-    expect(
-      view.container.querySelector('[data-rich-item-id="item-1"]'),
-    ).toHaveAttribute('data-compact-width', 'true')
+    expect(view.container.querySelector('[data-rich-item-id="item-1"]')).toHaveAttribute(
+      'data-compact-width',
+      'true',
+    )
     view.rerender(
       <TimelineTrackItems
         trackId="track-1"
@@ -305,21 +306,17 @@ describe('TimelineTrackItems stable DOM renderer', () => {
     )
 
     expect(view.container.querySelectorAll('[data-rich-item-id]')).toHaveLength(0)
-    expect(view.container.querySelectorAll('[data-timeline-density-bucket]').length).toBeLessThanOrEqual(
-      1024,
-    )
+    expect(
+      view.container.querySelectorAll('[data-timeline-density-bucket]').length,
+    ).toBeLessThanOrEqual(1024)
     expect(view.container.querySelector('[data-timeline-density-overview]')).toHaveAttribute(
       'data-density-bucket-count',
       '1000',
     )
 
-    const initialDensityOverview = view.container.querySelector(
-      '[data-timeline-density-overview]',
-    )
+    const initialDensityOverview = view.container.querySelector('[data-timeline-density-overview]')
     act(() => {
-      useSelectionStore
-        .getState()
-        .selectItems(overviewItems.slice(0, 128).map((item) => item.id))
+      useSelectionStore.getState().selectItems(overviewItems.slice(0, 128).map((item) => item.id))
     })
 
     expect(view.container.querySelectorAll('[data-rich-item-id]')).toHaveLength(128)

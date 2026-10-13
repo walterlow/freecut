@@ -63,11 +63,7 @@ export const MotionPreviewArea = memo(function MotionPreviewArea({
   const mainHolder = useCompositionNavigationStore((state) => state.mainHolder)
   const isTimelineLoading = useTimelineSettingsStore((state) => state.isTimelineLoading)
   const previewProject = useMemo(() => {
-    if (
-      isTimelineLoading ||
-      !mainHolder ||
-      activeComposition?.editorKind !== 'composite-2d'
-    ) {
+    if (isTimelineLoading || !mainHolder || activeComposition?.editorKind !== 'composite-2d') {
       return null
     }
     return {

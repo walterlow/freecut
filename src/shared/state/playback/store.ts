@@ -54,16 +54,11 @@ function enterNormalPlayback(state: PlaybackState & PlaybackActions) {
   }
 }
 
-function enterShuttlePlayback(
-  state: PlaybackState & PlaybackActions,
-  direction: -1 | 1,
-) {
+function enterShuttlePlayback(state: PlaybackState & PlaybackActions, direction: -1 | 1) {
   const playbackState = enterPlayback(state)
   return {
     ...(playbackState === state ? {} : playbackState),
-    playbackRate: state.isPlaying
-      ? getNextShuttleRate(state.playbackRate, direction)
-      : direction,
+    playbackRate: state.isPlaying ? getNextShuttleRate(state.playbackRate, direction) : direction,
     transportMode: 'shuttle' as const,
     playbackScrubResumeTransport: null,
   }
@@ -76,11 +71,7 @@ function updatePausedScrubFrame(
 ) {
   const nextFrame = normalizeFrame(frame)
   const nextItemId = itemId ?? null
-  if (
-    state.currentFrame === nextFrame &&
-    state.previewFrame === null &&
-    nextItemId === null
-  ) {
+  if (state.currentFrame === nextFrame && state.previewFrame === null && nextItemId === null) {
     return state
   }
   if (
@@ -221,8 +212,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         ),
       shuttleForward: () => set((state) => enterShuttlePlayback(state, 1)),
       shuttleReverse: () => set((state) => enterShuttlePlayback(state, -1)),
-      setPlaybackRate: (rate) =>
-        set({ playbackRate: rate, playbackScrubResumeTransport: null }),
+      setPlaybackRate: (rate) => set({ playbackRate: rate, playbackScrubResumeTransport: null }),
       toggleLoop: () => set((state) => ({ loop: !state.loop })),
       setVolume: (volume) => set({ volume }),
       toggleMute: () => set((state) => ({ muted: !state.muted })),

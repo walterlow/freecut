@@ -17,15 +17,9 @@ import {
   setPathVertexPropertyValue,
 } from './path-animatable-properties'
 
-export {
-  getShapeAnimatableBaseValue,
-} from './shape-animatable-properties'
+export { getShapeAnimatableBaseValue } from './shape-animatable-properties'
 
-function resolveAnimatedPathVertices(
-  item: ShapeItem,
-  itemKeyframes: ItemKeyframes,
-  frame: number,
-) {
+function resolveAnimatedPathVertices(item: ShapeItem, itemKeyframes: ItemKeyframes, frame: number) {
   if (item.shapeType !== 'path' || !item.pathVertices) return undefined
 
   const pathVertices = clonePathVertices(item.pathVertices)

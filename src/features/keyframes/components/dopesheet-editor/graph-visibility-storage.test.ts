@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vite-plus/test'
 import type { AnimatableProperty } from '@/types/keyframe'
 import { loadGraphVisibleProperties, saveGraphVisibleProperties } from './graph-visibility-storage'
 

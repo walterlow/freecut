@@ -333,10 +333,7 @@ describe('ClipPanel inspector tabs', () => {
 
     render(<ClipPanel />)
 
-    expect(screen.getByRole('tab', { name: 'Properties' })).toHaveAttribute(
-      'data-state',
-      'active',
-    )
+    expect(screen.getByRole('tab', { name: 'Properties' })).toHaveAttribute('data-state', 'active')
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Properties',
       'Audio',

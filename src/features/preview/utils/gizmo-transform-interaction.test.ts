@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 import {
   attachWindowTransformInteraction,
   suppressReleaseClick,
@@ -79,9 +79,6 @@ describe('attachWindowTransformInteraction', () => {
     )
 
     expect(updateInteraction).toHaveBeenLastCalledWith({ x: 75, y: 10 }, true, true, true)
-    expect(onTransformEnd).toHaveBeenCalledWith(
-      expect.objectContaining({ x: 75 }),
-      'move',
-    )
+    expect(onTransformEnd).toHaveBeenCalledWith(expect.objectContaining({ x: 75 }), 'move')
   })
 })

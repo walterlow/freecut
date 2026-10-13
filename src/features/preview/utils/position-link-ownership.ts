@@ -1,10 +1,10 @@
-import { getDirectPropertyLinks, type DirectPropertyLink, type ItemKeyframes } from '@/types/keyframe'
+import {
+  getDirectPropertyLinks,
+  type DirectPropertyLink,
+  type ItemKeyframes,
+} from '@/types/keyframe'
 
-const POSITION_LINK_TARGETS = new Set<DirectPropertyLink['targetProperty']>([
-  'position',
-  'x',
-  'y',
-])
+const POSITION_LINK_TARGETS = new Set<DirectPropertyLink['targetProperty']>(['position', 'x', 'y'])
 
 /**
  * A linked Position (or either scalar axis) owns canvas translation. Letting the

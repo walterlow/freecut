@@ -105,11 +105,9 @@ export function omitTranscriptSubtitleItemsForSoftSubtitleExport(
 ): CompositionInputProps {
   return {
     ...composition,
-    tracks: composition.tracks.map(
-      (track): TimelineTrack => ({
-        ...track,
-        items: (track.items ?? []).filter((item) => !isTranscriptSubtitleItem(item)),
-      }),
-    ),
+    tracks: composition.tracks.map((track): TimelineTrack => ({
+      ...track,
+      items: (track.items ?? []).filter((item) => !isTranscriptSubtitleItem(item)),
+    })),
   }
 }

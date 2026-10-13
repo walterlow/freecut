@@ -288,10 +288,7 @@ describe('useVisibleItems filtering logic', () => {
   it('shrinks the live detail range before the retained root cohort is pruned', () => {
     vi.useFakeTimers()
 
-    useItemsStore.getState().setItems([
-      makeItem('a', 0, 30),
-      makeItem('b', 500, 30),
-    ])
+    useItemsStore.getState().setItems([makeItem('a', 0, 30), makeItem('b', 500, 30)])
 
     render(createElement(DetailRangeProbe))
     const probe = screen.getByTestId('detail-range')

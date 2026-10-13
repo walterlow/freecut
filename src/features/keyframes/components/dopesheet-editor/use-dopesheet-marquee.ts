@@ -120,12 +120,7 @@ export function useDopesheetMarquee({
       }
       latestPointerRef.current = { pointerId, clientX, clientY }
     },
-    [
-      clearSelectionPreview,
-      getContentYFromClientY,
-      getTimelineXFromClientX,
-      hideMarqueeOverlay,
-    ],
+    [clearSelectionPreview, getContentYFromClientY, getTimelineXFromClientX, hideMarqueeOverlay],
   )
 
   const resolveSelectionFromMarquee = useCallback(

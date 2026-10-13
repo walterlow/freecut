@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import { clampPacketToTimeline, type TimedPacket } from './audio-packet-timeline'
 
 interface FakePacket extends TimedPacket<FakePacket> {}

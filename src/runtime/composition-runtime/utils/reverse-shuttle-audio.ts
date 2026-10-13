@@ -19,8 +19,7 @@ export function resolveReverseShuttleGrainPlan(params: {
   bufferDurationSeconds: number
   outputDurationSeconds?: number
 }): ReverseShuttleGrainPlan | null {
-  const outputDuration =
-    params.outputDurationSeconds ?? REVERSE_SHUTTLE_GRAIN_OUTPUT_SECONDS
+  const outputDuration = params.outputDurationSeconds ?? REVERSE_SHUTTLE_GRAIN_OUTPUT_SECONDS
   const playbackRate = Math.max(
     0.0625,
     Math.min(16, Math.abs(params.authoredPlaybackRate * params.transportPlaybackRate)),

@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react'
-import {
-  useClockPlaybackRate,
-  useSequenceContext,
-} from '@/runtime/composition-runtime/deps/player'
+import { useClockPlaybackRate, useSequenceContext } from '@/runtime/composition-runtime/deps/player'
 import { useVideoConfig, useIsPlaying } from '../../hooks/use-player-compat'
 import { useGizmoStore } from '@/runtime/composition-runtime/deps/stores'
 import { usePlaybackStore } from '@/runtime/composition-runtime/deps/stores'

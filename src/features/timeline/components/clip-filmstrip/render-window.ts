@@ -48,10 +48,7 @@ export function computeFilmstripRenderWindow({
   const basePadPx = Math.max(minimumPadPx, safeTileWidth * Math.max(0, minimumPadTiles))
   const renderOverflowPx = Math.max(0, safeRenderWidth - safeVisibleWidth)
   let paddedStartX = Math.max(0, visibleStartX - basePadPx)
-  let paddedEndX = Math.min(
-    safeRenderWidth,
-    visibleEndX + Math.max(basePadPx, renderOverflowPx),
-  )
+  let paddedEndX = Math.min(safeRenderWidth, visibleEndX + Math.max(basePadPx, renderOverflowPx))
   const safeMaxWindowWidth = Math.max(0, maxWindowWidth)
   if (paddedEndX - paddedStartX > safeMaxWindowWidth) {
     const cappedWidth = Math.min(safeRenderWidth, safeMaxWindowWidth)
@@ -60,10 +57,7 @@ export function computeFilmstripRenderWindow({
     // covered, but centering on that asymmetric padded range can move the whole
     // bounded canvas beyond the viewport on long clips.
     const center = (visibleStartX + visibleEndX) / 2
-    paddedStartX = Math.max(
-      0,
-      Math.min(safeRenderWidth - cappedWidth, center - cappedWidth / 2),
-    )
+    paddedStartX = Math.max(0, Math.min(safeRenderWidth - cappedWidth, center - cappedWidth / 2))
     paddedEndX = paddedStartX + cappedWidth
   }
 

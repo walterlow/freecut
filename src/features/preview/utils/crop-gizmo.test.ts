@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import { calculateCropFromDrag } from './crop-gizmo'
 
 const MEDIA_RECT = { x: 0, y: 0, width: 1000, height: 500 }

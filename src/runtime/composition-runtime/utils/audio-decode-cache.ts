@@ -116,10 +116,7 @@ interface DecodeAudioSampleData {
   sampleRate?: number
   timestamp?: number
   duration?: number
-  copyTo: (
-    destination: Float32Array,
-    options: { planeIndex: number; format: 'f32-planar' },
-  ) => void
+  copyTo: (destination: Float32Array, options: { planeIndex: number; format: 'f32-planar' }) => void
   close: () => void
 }
 

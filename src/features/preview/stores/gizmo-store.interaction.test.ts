@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vite-plus/test'
 import { useGizmoStore } from './gizmo-store'
 import type { Transform } from '../types/gizmo'
 
@@ -78,8 +78,6 @@ describe('gizmo interaction ownership', () => {
     useGizmoStore.getState().clearInteraction(secondInteractionId)
 
     useGizmoStore.getState().completePresentationHandoff(firstInteractionId)
-    expect(useGizmoStore.getState().presentationHandoff?.interactionId).toBe(
-      secondInteractionId,
-    )
+    expect(useGizmoStore.getState().presentationHandoff?.interactionId).toBe(secondInteractionId)
   })
 })

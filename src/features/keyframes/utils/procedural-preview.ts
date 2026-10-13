@@ -14,10 +14,7 @@ import type { AnimatableProperty, TransformAnimatableProperty } from '@/types/ke
 import type { ItemKeyframes } from '@/types/keyframe'
 import type { MotionAnimationLayer, MotionModifier } from '@/types/motion'
 import { applyMotionModifiers, getActiveMotionModifierChannels } from './motion-modifier-eval'
-import {
-  applyMotionAnimationLayers,
-  getActiveMotionLayerChannels,
-} from './motion-layer-eval'
+import { applyMotionAnimationLayers, getActiveMotionLayerChannels } from './motion-layer-eval'
 import { resolveAnimatedTransform } from './animated-transform-resolver'
 
 /**

@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test'
 import type { Transform } from '../types/gizmo'
-import {
-  attachWindowAnchorInteraction,
-  calculateAnchorDrag,
-} from './anchor-gizmo'
+import { attachWindowAnchorInteraction, calculateAnchorDrag } from './anchor-gizmo'
 
 const transform: Transform = {
   x: 0,
@@ -66,9 +63,7 @@ describe('attachWindowAnchorInteraction', () => {
       expect.objectContaining({ anchorX: 140, anchorY: 75 }),
     )
     expect(onCommit).toHaveBeenCalledOnce()
-    expect(onCommit).toHaveBeenCalledWith(
-      expect.objectContaining({ anchorX: 140, anchorY: 75 }),
-    )
+    expect(onCommit).toHaveBeenCalledWith(expect.objectContaining({ anchorX: 140, anchorY: 75 }))
     expect(restorePreview).toHaveBeenCalledWith(true)
     expect(onFinish).toHaveBeenCalledOnce()
   })

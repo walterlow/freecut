@@ -222,12 +222,7 @@ export function shouldForceContinuousPreviewOverlayFromIndex(
 
   return index.candidateItems.some((item) => {
     if (
-      !rangesOverlap(
-        startFrame,
-        endFrameExclusive,
-        item.from,
-        item.from + item.durationInFrames,
-      )
+      !rangesOverlap(startFrame, endFrameExclusive, item.from, item.from + item.durationInFrames)
     ) {
       return false
     }

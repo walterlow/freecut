@@ -88,10 +88,7 @@ function applyMatrix(local: ResolvedTransform, matrix: AffineMatrix): ResolvedTr
   }
 }
 
-function applyChildBasis(
-  local: ResolvedTransform,
-  binding: TransformParentBinding,
-): AffineMatrix {
+function applyChildBasis(local: ResolvedTransform, binding: TransformParentBinding): AffineMatrix {
   const inverseLocalReference = invert(toMatrix(binding.childLocalReference))
   if (!inverseLocalReference) return toMatrix(local)
   return multiply(
@@ -176,9 +173,7 @@ export function resolveTransformHierarchy(
 
   state.active.add(item.id)
   const parent = binding.parentItemId ? context.getItem(binding.parentItemId) : undefined
-  const parentWorld = parent
-    ? resolveTransformHierarchy(parent, context, state)
-    : undefined
+  const parentWorld = parent ? resolveTransformHierarchy(parent, context, state) : undefined
   const resolved = applyTransformParentBinding(local, binding, parentWorld)
   state.active.delete(item.id)
   state.cache.set(item.id, resolved)
@@ -234,9 +229,7 @@ const TRANSFORM_PARENT_INHERITED_PROPERTIES = new Set<DirectLinkableProperty>([
   'rotation',
 ])
 
-export function isTransformParentInheritedProperty(
-  property: DirectLinkableProperty,
-): boolean {
+export function isTransformParentInheritedProperty(property: DirectLinkableProperty): boolean {
   return TRANSFORM_PARENT_INHERITED_PROPERTIES.has(property)
 }
 

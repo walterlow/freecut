@@ -1,10 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it } from 'vite-plus/test'
-import {
-  copyShuttleGrainSamples,
-  resolveReverseShuttleGrainPlan,
-} from './reverse-shuttle-audio'
+import { copyShuttleGrainSamples, resolveReverseShuttleGrainPlan } from './reverse-shuttle-audio'
 
 describe('reverse shuttle audio', () => {
   it('maps signed reverse transport to a pitch-shifted backward source window', () => {

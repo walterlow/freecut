@@ -234,7 +234,12 @@ describe('inline span flow (spanLayout: inline)', () => {
       textSpans: [{ text: '  раз два', color: '#ffffff' }],
     })
     // Narrow enough to force a break between the two words.
-    const layout = layoutTextBlock(item, makeMeasurer().measure('  раз', '58px x', 0) + 1, 400, makeMeasurer())
+    const layout = layoutTextBlock(
+      item,
+      makeMeasurer().measure('  раз', '58px x', 0) + 1,
+      400,
+      makeMeasurer(),
+    )
 
     expect(layout.lines).toHaveLength(2)
     // Paragraph indent survives on the first line...

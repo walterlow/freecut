@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import { planarRgbToRgba, rgbaToPlanarRgb } from './planar-rgb'
 
 function makeRgba(width: number, height: number): Uint8ClampedArray {

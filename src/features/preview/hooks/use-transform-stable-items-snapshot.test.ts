@@ -67,19 +67,22 @@ describe('transform-stable preview items snapshot', () => {
     const initial = createShape()
 
     expect(
-      canRetainSnapshotForTransformChanges([initial], [
-        { ...initial, from: 12, transform: { ...initial.transform, x: 10 } },
-      ]),
+      canRetainSnapshotForTransformChanges(
+        [initial],
+        [{ ...initial, from: 12, transform: { ...initial.transform, x: 10 } }],
+      ),
     ).toBe(false)
     expect(
-      canRetainSnapshotForTransformChanges([initial], [
-        { ...initial, trackId: 'track-2', transform: { ...initial.transform, x: 10 } },
-      ]),
+      canRetainSnapshotForTransformChanges(
+        [initial],
+        [{ ...initial, trackId: 'track-2', transform: { ...initial.transform, x: 10 } }],
+      ),
     ).toBe(false)
     expect(
-      canRetainSnapshotForTransformChanges([{ ...initial, isMask: true }], [
-        { ...initial, isMask: true, transform: { ...initial.transform, x: 10 } },
-      ]),
+      canRetainSnapshotForTransformChanges(
+        [{ ...initial, isMask: true }],
+        [{ ...initial, isMask: true, transform: { ...initial.transform, x: 10 } }],
+      ),
     ).toBe(false)
     expect(canRetainSnapshotForTransformChanges([initial], [])).toBe(false)
   })

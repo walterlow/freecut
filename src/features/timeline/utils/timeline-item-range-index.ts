@@ -36,8 +36,7 @@ export function getTimelineTrackItemRangeIndex(
   const entriesByStart = stableItems
     .map((item, originalIndex) => ({ item, originalIndex }))
     .sort(
-      (left, right) =>
-        left.item.from - right.item.from || left.originalIndex - right.originalIndex,
+      (left, right) => left.item.from - right.item.from || left.originalIndex - right.originalIndex,
     )
   const prefixMaxEnd: number[] = []
   const itemById = new Map<string, TimelineItem>()
@@ -60,10 +59,8 @@ export function getTimelineTrackItemRangeIndex(
     entriesByStart,
     prefixMaxEnd,
     itemCount: stableItems.length,
-    minDurationInFrames:
-      minDurationInFrames === Number.POSITIVE_INFINITY ? 0 : minDurationInFrames,
-    maxDurationInFrames:
-      maxDurationInFrames === Number.NEGATIVE_INFINITY ? 0 : maxDurationInFrames,
+    minDurationInFrames: minDurationInFrames === Number.POSITIVE_INFINITY ? 0 : minDurationInFrames,
+    maxDurationInFrames: maxDurationInFrames === Number.NEGATIVE_INFINITY ? 0 : maxDurationInFrames,
   }
   rangeIndexByItems.set(stableItems, index)
   return index

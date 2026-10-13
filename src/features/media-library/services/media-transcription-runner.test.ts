@@ -117,9 +117,9 @@ describe('runMediaTranscriptionJob', () => {
   it('does not hide unrelated Large Turbo failures behind the fallback', async () => {
     mediaTranscriptionServiceMocks.transcribeMedia.mockRejectedValue(new Error('Network failed'))
 
-    await expect(
-      runMediaTranscriptionJob('media-1', { model: 'whisper-large' }),
-    ).rejects.toThrow('Network failed')
+    await expect(runMediaTranscriptionJob('media-1', { model: 'whisper-large' })).rejects.toThrow(
+      'Network failed',
+    )
     expect(mediaTranscriptionServiceMocks.transcribeMedia).toHaveBeenCalledTimes(1)
   })
 

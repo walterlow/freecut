@@ -96,12 +96,7 @@ body.canvas-translate-cursor-not-allowed * {
 
   body {
     @apply bg-background text-foreground;
-    font-family:
-      'IBM Plex Sans',
-      -apple-system,
-      BlinkMacSystemFont,
-      'Segoe UI',
-      sans-serif;
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     user-select: none;

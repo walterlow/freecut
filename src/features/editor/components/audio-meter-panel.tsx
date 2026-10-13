@@ -215,8 +215,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const audioGraphItems = useItemsStore(
     useShallow((state) =>
       state.items.filter(
-        (item) =>
-          item.type === 'audio' || item.type === 'video' || item.type === 'composition',
+        (item) => item.type === 'audio' || item.type === 'video' || item.type === 'composition',
       ),
     ),
   )

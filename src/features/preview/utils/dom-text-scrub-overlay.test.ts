@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import type { TextItem, TimelineItem, TimelineTrack } from '@/types/timeline'
 import { buildDomTextScrubOverlayPlan } from './dom-text-scrub-overlay'
 

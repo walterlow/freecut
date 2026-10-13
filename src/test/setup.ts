@@ -1,7 +1,9 @@
-import '@testing-library/jest-dom'
-import { afterEach } from 'vite-plus/test'
+import * as matchers from '@testing-library/jest-dom/matchers'
+import { afterEach, expect } from 'vite-plus/test'
 import '@/i18n'
 import { resetAutoKeyframeStore } from '@/features/keyframes/stores/auto-keyframe-store'
+
+expect.extend(matchers)
 
 // Mock ImageData for Canvas operations
 type TestGlobalWithImageData = typeof globalThis & { ImageData?: typeof ImageData }

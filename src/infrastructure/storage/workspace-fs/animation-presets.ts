@@ -95,14 +95,7 @@ const VALID_MOTION_MODIFIER_CHANNELS = new Set<MotionModifierChannel>([
   'opacity',
 ])
 
-const VALID_MOTION_LAYER_PROPERTIES = new Set([
-  'x',
-  'y',
-  'width',
-  'height',
-  'rotation',
-  'opacity',
-])
+const VALID_MOTION_LAYER_PROPERTIES = new Set(['x', 'y', 'width', 'height', 'rotation', 'opacity'])
 
 const VALID_ITEM_TYPES = new Set<TimelineItem['type']>([
   'video',

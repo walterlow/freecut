@@ -1,6 +1,6 @@
 name: Bug report
 description: Report something that is not working as expected.
-title: "[Bug]: "
+title: '[Bug]: '
 body:
   - type: markdown
     attributes:
@@ -41,7 +41,7 @@ body:
     attributes:
       label: Browser
       description: Include the browser name and version.
-      placeholder: "Chrome 136"
+      placeholder: 'Chrome 136'
     validations:
       required: true
 
@@ -49,7 +49,7 @@ body:
     id: operating-system
     attributes:
       label: Operating system
-      placeholder: "Windows 11, macOS 15, or Ubuntu 24.04"
+      placeholder: 'Windows 11, macOS 15, or Ubuntu 24.04'
     validations:
       required: true
 
@@ -58,7 +58,7 @@ body:
     attributes:
       label: FreeCut version
       description: Share the deployed version, release, or commit when known.
-      placeholder: "freecut.net, release tag, or commit SHA"
+      placeholder: 'freecut.net, release tag, or commit SHA'
 
   - type: checkboxes
     id: checks

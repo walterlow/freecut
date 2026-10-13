@@ -411,10 +411,7 @@ function holdTransitionElementAtState(
   element.playbackRate = state.playbackRate
 }
 
-function playTransitionElementWhenReady(
-  element: HTMLVideoElement,
-  playbackRate: number,
-): void {
+function playTransitionElementWhenReady(element: HTMLVideoElement, playbackRate: number): void {
   if (element.readyState >= 2) {
     transitionSafePlay(element, playbackRate)
     return
@@ -693,9 +690,7 @@ function resolvePlayingTransitionElementState({
   transitionState: TransitionDomPlaybackState | null
 } {
   const shouldPrepositionIncoming =
-    window !== null &&
-    playback.currentFrame < window.startFrame &&
-    clip?.id === window.rightClip.id
+    window !== null && playback.currentFrame < window.startFrame && clip?.id === window.rightClip.id
   const transitionState =
     window && clip?.type === 'video'
       ? resolveTransitionDomPlaybackState({
@@ -787,9 +782,7 @@ export function usePreviewTransitionSessionController({
   transitionSessionTraceRef,
   transitionTelemetryRef,
 }: UsePreviewTransitionSessionControllerParams) {
-  const pausedTransitionRenderRetryCleanupRef = useRef(
-    new Map<HTMLVideoElement, () => void>(),
-  )
+  const pausedTransitionRenderRetryCleanupRef = useRef(new Map<HTMLVideoElement, () => void>())
 
   const clearTransitionPlaybackSession = useCallback(() => {
     completeTransitionSessionTrace(

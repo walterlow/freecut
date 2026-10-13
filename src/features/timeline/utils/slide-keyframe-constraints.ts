@@ -40,7 +40,10 @@ export function clampSlideDeltaToPreserveKeyframes(
   const isValid = (delta: number): boolean => {
     const previews = new Map<string, TimelineItem>()
     for (const participant of participants) {
-      previews.set(participant.item.id, { ...participant.item, from: participant.item.from + delta })
+      previews.set(participant.item.id, {
+        ...participant.item,
+        from: participant.item.from + delta,
+      })
       if (participant.leftNeighbor) {
         previews.set(participant.leftNeighbor.id, {
           ...participant.leftNeighbor,

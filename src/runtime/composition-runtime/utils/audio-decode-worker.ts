@@ -323,7 +323,9 @@ async function decodeWindow(
       }
 
       const iteratorStartTime =
-        initialSampleEndTime === null ? safeStartTime : Math.max(safeStartTime, initialSampleEndTime)
+        initialSampleEndTime === null
+          ? safeStartTime
+          : Math.max(safeStartTime, initialSampleEndTime)
       if (coverageEndTime < targetCoverageEndTime) {
         for await (const sample of sink.samples(
           iteratorStartTime,

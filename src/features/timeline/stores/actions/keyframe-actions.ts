@@ -63,11 +63,11 @@ export function setDirectPropertyLink(itemId: string, link: DirectPropertyLink):
   if (
     link.enabled &&
     (wouldCreateItemDependencyCycle(
-        itemId,
-        link.sourceItemId,
-        (candidateId) => itemsState.itemById[candidateId],
-        (candidateId) => keyframesState.keyframesByItemId[candidateId],
-      ) ||
+      itemId,
+      link.sourceItemId,
+      (candidateId) => itemsState.itemById[candidateId],
+      (candidateId) => keyframesState.keyframesByItemId[candidateId],
+    ) ||
       (isTransformParentInheritedProperty(link.targetProperty) &&
         hasTransformParentDependency(
           itemId,

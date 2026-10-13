@@ -125,13 +125,7 @@ describe('ClipContent', () => {
     const onRender = vi.fn()
     const view = render(
       <Profiler id="compact-clip-content" onRender={onRender}>
-        <ClipContent
-          item={item}
-          clipLeftFrames={0}
-          clipWidthFrames={30}
-          fps={30}
-          isCompactWidth
-        />
+        <ClipContent item={item} clipLeftFrames={0} clipWidthFrames={30} fps={30} isCompactWidth />
       </Profiler>,
     )
     const initialCommitCount = onRender.mock.calls.length
@@ -831,12 +825,7 @@ describe('ClipContent', () => {
     const onRender = vi.fn()
     render(
       <Profiler id="retained-live-zoom-out-video" onRender={onRender}>
-        <ClipContent
-          item={item}
-          clipLeftFrames={0}
-          clipWidthFrames={30}
-          fps={30}
-        />
+        <ClipContent item={item} clipLeftFrames={0} clipWidthFrames={30} fps={30} />
       </Profiler>,
     )
 

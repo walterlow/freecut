@@ -104,9 +104,7 @@ function resolveMixedPositionValue({
   if (values.length === 0) return 0
 
   const firstValue = values[0]!
-  return values.every((value) => Math.abs(value - firstValue) < 0.1)
-    ? firstValue
-    : 'mixed'
+  return values.every((value) => Math.abs(value - firstValue) < 0.1) ? firstValue : 'mixed'
 }
 
 const PositionAxisControl = memo(function PositionAxisControl({

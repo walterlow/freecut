@@ -402,16 +402,8 @@ describe('useItemVisualState parenting', () => {
         <SequenceContext.Provider
           value={{ from: 0, parentFrom: 0, localFrame: 0, durationInFrames: 120 }}
         >
-          <KeyframesProvider
-            keyframes={[targetKeyframes]}
-            items={items}
-            canvas={canvas}
-          >
-            <PlannedTransformXProbe
-              item={target}
-              items={items}
-              keyframes={[targetKeyframes]}
-            />
+          <KeyframesProvider keyframes={[targetKeyframes]} items={items} canvas={canvas}>
+            <PlannedTransformXProbe item={target} items={items} keyframes={[targetKeyframes]} />
           </KeyframesProvider>
         </SequenceContext.Provider>
       </VideoConfigProvider>,
@@ -422,11 +414,7 @@ describe('useItemVisualState parenting', () => {
     act(() => {
       const gizmo = useGizmoStore.getState()
       gizmo.setSnappingEnabled(false)
-      gizmo.startTranslate(
-        source.id,
-        { x: 110, y: 0 },
-        resolvedTransform({ x: 110 }),
-      )
+      gizmo.startTranslate(source.id, { x: 110, y: 0 }, resolvedTransform({ x: 110 }))
       gizmo.updateInteraction({ x: 130, y: 0 }, false)
     })
 

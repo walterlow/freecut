@@ -221,10 +221,7 @@ function getPreviewedPositionValue(
   }
 }
 
-function getPreviewedAnchorValue(
-  preview: Partial<ResolvedTransform>,
-  fallback: Vector2,
-): Vector2 {
+function getPreviewedAnchorValue(preview: Partial<ResolvedTransform>, fallback: Vector2): Vector2 {
   return {
     x: preview.anchorX ?? fallback.x,
     y: preview.anchorY ?? fallback.y,
@@ -318,30 +315,12 @@ function resolveReferencedExpressionProperty(
   if (isVectorAnimatableProperty(property)) {
     const preLinkValue = getPreLinkVectorValue(item, property, context)
     const postLinkValue = resolveLinkedVectorValue(item.id, property, preLinkValue, context, state)
-    return resolvePropertyExpressionValue(
-      item.id,
-      property,
-      postLinkValue,
-      context,
-      state,
-    ).value
+    return resolvePropertyExpressionValue(item.id, property, postLinkValue, context, state).value
   }
   const preLinkValue = getPreExpressionValue(item, property, context)
   if (preLinkValue === null) return null
-  const postLinkValue = resolveLinkedPropertyValue(
-    item.id,
-    property,
-    preLinkValue,
-    context,
-    state,
-  )
-  return resolvePropertyExpressionValue(
-    item.id,
-    property,
-    postLinkValue,
-    context,
-    state,
-  ).value
+  const postLinkValue = resolveLinkedPropertyValue(item.id, property, preLinkValue, context, state)
+  return resolvePropertyExpressionValue(item.id, property, postLinkValue, context, state).value
 }
 
 export function resolveExpressionReferenceValue(
@@ -486,9 +465,7 @@ function getVectorTransformValue(
   return {
     x: baseResolved.width === 0 ? 100 : (vectorAnimation.result.width / baseResolved.width) * 100,
     y:
-      baseResolved.height === 0
-        ? 100
-        : (vectorAnimation.result.height / baseResolved.height) * 100,
+      baseResolved.height === 0 ? 100 : (vectorAnimation.result.height / baseResolved.height) * 100,
   }
 }
 
@@ -693,7 +670,8 @@ export function hasKeyframeAnimation(itemKeyframes: ItemKeyframes | undefined): 
     getDirectPropertyLinks(itemKeyframes).some((link) => link.enabled) ||
     (itemKeyframes.expressions?.some(
       (expression) => expression.type === 'expression' && expression.enabled,
-    ) ?? false)
+    ) ??
+      false)
   )
 }
 

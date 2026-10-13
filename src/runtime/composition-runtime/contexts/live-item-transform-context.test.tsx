@@ -67,9 +67,7 @@ describe('live item transform context', () => {
     } as typeof stored & { runtimeDecoration: string }
     const testSource = createSource([stored])
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <LiveItemTransformProvider source={testSource.source}>
-        {children}
-      </LiveItemTransformProvider>
+      <LiveItemTransformProvider source={testSource.source}>{children}</LiveItemTransformProvider>
     )
 
     const { result } = renderHook(() => useLiveItemTransform(runtimeItem), { wrapper })
@@ -116,19 +114,14 @@ describe('live item transform context', () => {
       },
     }
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <LiveItemTransformProvider source={testSource.source}>
-        {children}
-      </LiveItemTransformProvider>
+      <LiveItemTransformProvider source={testSource.source}>{children}</LiveItemTransformProvider>
     )
     let renderCount = 0
 
     const { result } = renderHook(
       () => {
         renderCount += 1
-        return useLiveTransformDependencySignature(
-          child,
-          (itemId) => keyframesByItemId[itemId],
-        )
+        return useLiveTransformDependencySignature(child, (itemId) => keyframesByItemId[itemId])
       },
       { wrapper },
     )
@@ -190,18 +183,13 @@ describe('live item transform context', () => {
     }
     const testSource = createSource([sourceItem, middle, target, unrelated])
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <LiveItemTransformProvider source={testSource.source}>
-        {children}
-      </LiveItemTransformProvider>
+      <LiveItemTransformProvider source={testSource.source}>{children}</LiveItemTransformProvider>
     )
     let renderCount = 0
     const { result } = renderHook(
       () => {
         renderCount += 1
-        return useLiveTransformDependencySignature(
-          target,
-          (itemId) => keyframesByItemId[itemId],
-        )
+        return useLiveTransformDependencySignature(target, (itemId) => keyframesByItemId[itemId])
       },
       { wrapper },
     )
@@ -245,16 +233,10 @@ describe('live item transform context', () => {
     }
     const testSource = createSource([sourceItem, target])
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <LiveItemTransformProvider source={testSource.source}>
-        {children}
-      </LiveItemTransformProvider>
+      <LiveItemTransformProvider source={testSource.source}>{children}</LiveItemTransformProvider>
     )
     const { result } = renderHook(
-      () =>
-        useLiveTransformDependencySignature(
-          target,
-          (itemId) => keyframesByItemId[itemId],
-        ),
+      () => useLiveTransformDependencySignature(target, (itemId) => keyframesByItemId[itemId]),
       { wrapper },
     )
     const initialSignature = result.current
@@ -304,16 +286,11 @@ describe('live item transform context', () => {
     }
     const testSource = createSource([sourceItem, middle, mask])
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <LiveItemTransformProvider source={testSource.source}>
-        {children}
-      </LiveItemTransformProvider>
+      <LiveItemTransformProvider source={testSource.source}>{children}</LiveItemTransformProvider>
     )
     const { result } = renderHook(
       () =>
-        useLiveTransformDependencySignatureForItems(
-          [mask],
-          (itemId) => keyframesByItemId[itemId],
-        ),
+        useLiveTransformDependencySignatureForItems([mask], (itemId) => keyframesByItemId[itemId]),
       { wrapper },
     )
     const initialSignature = result.current
@@ -352,10 +329,7 @@ describe('live item transform context', () => {
       },
     })
     const items = new Map(
-      [commonParent, target, middle, rootSource, parentedSource].map((item) => [
-        item.id,
-        item,
-      ]),
+      [commonParent, target, middle, rootSource, parentedSource].map((item) => [item.id, item]),
     )
     const targetKeyframes = (sourceItemId: string): ItemKeyframes => ({
       itemId: target.id,
@@ -375,8 +349,7 @@ describe('live item transform context', () => {
     const rootPlan = buildItemTransformDependencyPlan(
       target,
       (itemId) => items.get(itemId),
-      (itemId) =>
-        itemId === target.id ? targetKeyframes(rootSource.id) : undefined,
+      (itemId) => (itemId === target.id ? targetKeyframes(rootSource.id) : undefined),
     )
     expect(rootPlan.linearTranslateSourceItemIds.has(rootSource.id)).toBe(true)
 
@@ -403,19 +376,14 @@ describe('live item transform context', () => {
       (itemId) => transitiveKeyframes[itemId],
     )
     expect(transitivePlan.linearTranslateSourceItemIds.has(middle.id)).toBe(true)
-    expect(transitivePlan.linearTranslateSourceItemIds.has(rootSource.id)).toBe(
-      true,
-    )
+    expect(transitivePlan.linearTranslateSourceItemIds.has(rootSource.id)).toBe(true)
 
     const mismatchedPlan = buildItemTransformDependencyPlan(
       target,
       (itemId) => items.get(itemId),
-      (itemId) =>
-        itemId === target.id ? targetKeyframes(parentedSource.id) : undefined,
+      (itemId) => (itemId === target.id ? targetKeyframes(parentedSource.id) : undefined),
     )
-    expect(
-      mismatchedPlan.linearTranslateSourceItemIds.has(parentedSource.id),
-    ).toBe(false)
+    expect(mismatchedPlan.linearTranslateSourceItemIds.has(parentedSource.id)).toBe(false)
     expect(mismatchedPlan.sourceItemIds.has(parentedSource.id)).toBe(true)
   })
 
@@ -427,9 +395,7 @@ describe('live item transform context', () => {
     } as typeof stored & { runtimeDecoration: string }
     const testSource = createSource([stored])
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <LiveItemTransformProvider source={testSource.source}>
-        {children}
-      </LiveItemTransformProvider>
+      <LiveItemTransformProvider source={testSource.source}>{children}</LiveItemTransformProvider>
     )
     let renderCount = 0
 

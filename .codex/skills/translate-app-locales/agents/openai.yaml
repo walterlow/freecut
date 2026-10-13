@@ -1,4 +1,4 @@
 interface:
-  display_name: "Translate App Locales"
-  short_description: "Add complete app translations across locale files."
+  display_name: 'Translate App Locales'
+  short_description: 'Add complete app translations across locale files.'
   default_prompt: "Use this skill to add or audit a language translation across an app's base locale files and partial translation namespaces, preserving interpolation tokens, HTML tags, and coverage parity with English."

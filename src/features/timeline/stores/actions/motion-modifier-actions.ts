@@ -6,11 +6,7 @@
  * existing modifier of the same type on that item (apply == set, not stack).
  */
 
-import type {
-  MotionAnimationLayer,
-  MotionModifier,
-  MotionModifierType,
-} from '@/types/motion'
+import type { MotionAnimationLayer, MotionModifier, MotionModifierType } from '@/types/motion'
 import type { AnimatableProperty } from '@/types/keyframe'
 import type { TimelineItem } from '@/types/timeline'
 import { useItemsStore } from '../items-store'

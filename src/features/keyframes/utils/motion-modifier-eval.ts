@@ -53,9 +53,7 @@ function getMotionModifierChannelGain(
 }
 
 /** Enabled transform channels, shared by UI previews, baking, and evaluation. */
-export function getActiveMotionModifierChannels(
-  modifier: MotionModifier,
-): MotionModifierChannel[] {
+export function getActiveMotionModifierChannels(modifier: MotionModifier): MotionModifierChannel[] {
   return MODIFIER_CHANNELS[modifier.type].filter(
     (channel) => getMotionModifierChannelGain(modifier, channel) > 0,
   )
@@ -294,13 +292,9 @@ export function removeMotionModifiers(
     y: resolved.y - contribution.dy,
     rotation: resolved.rotation - contribution.dRotation,
     width:
-      contribution.scaleWidth === 0
-        ? resolved.width
-        : resolved.width / contribution.scaleWidth,
+      contribution.scaleWidth === 0 ? resolved.width : resolved.width / contribution.scaleWidth,
     height:
-      contribution.scaleHeight === 0
-        ? resolved.height
-        : resolved.height / contribution.scaleHeight,
+      contribution.scaleHeight === 0 ? resolved.height : resolved.height / contribution.scaleHeight,
     opacity: clamp(resolved.opacity - contribution.dOpacity, 0, 1),
   }
 }

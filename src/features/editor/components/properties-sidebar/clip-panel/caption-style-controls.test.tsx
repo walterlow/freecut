@@ -43,9 +43,7 @@ const netflixCaption: TextItem = {
 
 describe('CaptionStyleControls selected styling', () => {
   it('uses neutral selected styling for the active preset and enabled background', () => {
-    render(
-      <CaptionStyleControls items={[netflixCaption]} canvasWidth={1920} canvasHeight={1080} />,
-    )
+    render(<CaptionStyleControls items={[netflixCaption]} canvasWidth={1920} canvasHeight={1080} />)
 
     for (const control of [
       screen.getByRole('button', { name: 'Netflix' }),

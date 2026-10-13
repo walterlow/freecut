@@ -98,13 +98,7 @@ export function countCompactTimelineItemsAtZoom(
   let high = sortedDurationsInFrames.length
   while (low < high) {
     const middle = (low + high) >> 1
-    if (
-      isTimelineItemCompactAtZoom(
-        sortedDurationsInFrames[middle]!,
-        fps,
-        pixelsPerSecond,
-      )
-    ) {
+    if (isTimelineItemCompactAtZoom(sortedDurationsInFrames[middle]!, fps, pixelsPerSecond)) {
       low = middle + 1
     } else {
       high = middle

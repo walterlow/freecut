@@ -122,9 +122,7 @@ export function useStagedTimelineDetailIds(
   immediateIds: ReadonlySet<string>,
   isZoomInteracting: boolean,
 ): ReadonlySet<string> {
-  const [promotedIds, setPromotedIds] = useState<ReadonlySet<string>>(
-    () => new Set(eligibleIds),
-  )
+  const [promotedIds, setPromotedIds] = useState<ReadonlySet<string>>(() => new Set(eligibleIds))
   const promotedIdsRef = useRef(promotedIds)
 
   const visiblePromotedIds = useMemo(() => {

@@ -402,8 +402,7 @@ describe('PitchCorrectedAudio', () => {
     await waitFor(() => {
       expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).toHaveBeenCalledTimes(1)
     })
-    const reverseOptions =
-      audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mock.calls[0]?.[2]
+    const reverseOptions = audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mock.calls[0]?.[2]
     expect(reverseOptions?.targetTimeSeconds).toBeCloseTo(10, 4)
     expect(reverseOptions?.preRollSeconds).toBe(4)
     expect(document.querySelector('[data-testid="pitch"]')).toBeInTheDocument()

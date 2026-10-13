@@ -47,8 +47,7 @@ export type PathVertexAnimatableComponent =
   | 'outX'
   | 'outY'
 
-export type PathVertexAnimatableProperty =
-  `pathVertex:${number}:${PathVertexAnimatableComponent}`
+export type PathVertexAnimatableProperty = `pathVertex:${number}:${PathVertexAnimatableComponent}`
 
 export type AnimatableProperty =
   | BuiltInAnimatableProperty

@@ -1115,9 +1115,12 @@ describe('TimelineStoreFacade', () => {
       expect(
         savedTimeline.compositions?.find((composition) => composition.id === 'motion-comp'),
       ).toMatchObject({
-        items: [expect.objectContaining({ id: 'motion-base' }), expect.objectContaining({
-          id: 'motion-unsaved',
-        })],
+        items: [
+          expect.objectContaining({ id: 'motion-base' }),
+          expect.objectContaining({
+            id: 'motion-unsaved',
+          }),
+        ],
         durationInFrames: 100,
         busAudioEq: motionBus,
         markers: motionMarkers,

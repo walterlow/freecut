@@ -98,13 +98,7 @@ function getGroupTextKeyframeOperation(
   currentFrame: number,
   forceFrameScoped: boolean,
 ): AutoKeyframeOperation | null {
-  const automatic = getAutoKeyframeOperation(
-    item,
-    itemKeyframes,
-    property,
-    value,
-    currentFrame,
-  )
+  const automatic = getAutoKeyframeOperation(item, itemKeyframes, property, value, currentFrame)
   if (automatic || !forceFrameScoped) return automatic
 
   const relativeFrame = currentFrame - item.from

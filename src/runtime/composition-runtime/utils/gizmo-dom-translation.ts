@@ -46,10 +46,8 @@ export function resolveGizmoDomTranslation({
     targetX = previewTransform.x
     targetY = previewTransform.y
   } else if (followsActiveItem || positionSourceItemId === activeItemId) {
-    targetX =
-      interactionStartTransform.x + (previewTransform.x - activeStartTransform.x)
-    targetY =
-      interactionStartTransform.y + (previewTransform.y - activeStartTransform.y)
+    targetX = interactionStartTransform.x + (previewTransform.x - activeStartTransform.x)
+    targetY = interactionStartTransform.y + (previewTransform.y - activeStartTransform.y)
   } else {
     return null
   }

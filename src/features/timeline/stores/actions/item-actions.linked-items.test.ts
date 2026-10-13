@@ -296,10 +296,12 @@ describe('linked timeline items', () => {
       parentTrackId: group.id,
     })
     useItemsStore.getState().setTracks([group, firstChild, secondChild])
-    useItemsStore.getState().setItems([
-      makeVideoItem({ id: 'child-item-1', trackId: firstChild.id, linkedGroupId: undefined }),
-      makeVideoItem({ id: 'child-item-2', trackId: secondChild.id, linkedGroupId: undefined }),
-    ])
+    useItemsStore
+      .getState()
+      .setItems([
+        makeVideoItem({ id: 'child-item-1', trackId: firstChild.id, linkedGroupId: undefined }),
+        makeVideoItem({ id: 'child-item-2', trackId: secondChild.id, linkedGroupId: undefined }),
+      ])
 
     removeItems(['child-item-1'])
     expect(useItemsStore.getState().tracks.map((track) => track.id)).toEqual([

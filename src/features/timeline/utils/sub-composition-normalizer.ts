@@ -75,8 +75,6 @@ export function normalizeSubComposition<TComposition extends CompositionLike>(
     ...composition,
     editorKind: composition.editorKind === 'composite-2d' ? 'composite-2d' : 'sequence',
     tracks: hydrateTracksFromItems(composition.items, composition.tracks),
-    ...(compositionControls
-      ? { compositionControls }
-      : { compositionControls: undefined }),
+    ...(compositionControls ? { compositionControls } : { compositionControls: undefined }),
   }
 }

@@ -430,8 +430,7 @@ const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
   }> => {
     if (
       !proceduralPreview ||
-      (proceduralPreview.modifiers.length === 0 &&
-        (proceduralPreview.layers?.length ?? 0) === 0)
+      (proceduralPreview.modifiers.length === 0 && (proceduralPreview.layers?.length ?? 0) === 0)
     )
       return []
     const { graphLeft, graphTop, graphWidth, graphHeight, frameRange } = getGraphDimensions(

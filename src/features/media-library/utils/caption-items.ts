@@ -976,8 +976,7 @@ export function appendVirtualTranscriptCaptionTrack(
     unfilteredBaseTracks.flatMap((track) =>
       (track.items ?? [])
         .filter(
-          (item) =>
-            (item.type === 'video' || item.type === 'audio') && item.isReversed === true,
+          (item) => (item.type === 'video' || item.type === 'audio') && item.isReversed === true,
         )
         .map((item) => item.id),
     ),

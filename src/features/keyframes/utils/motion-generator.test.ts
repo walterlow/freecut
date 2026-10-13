@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vite-plus/test'
 import type { ResolvedTransform } from '@/types/transform'
 import { applyMotionGeneratorSettings } from './motion-generator'
 import { MOTION_PRESETS_BY_ID, type MotionPresetBuildContext } from './motion-presets'

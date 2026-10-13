@@ -1,11 +1,5 @@
-import type {
-  DirectLinkableProperty,
-  Vector2,
-} from '@/types/keyframe'
-import {
-  isDirectLinkableProperty,
-  isVectorAnimatableProperty,
-} from '@/types/keyframe'
+import type { DirectLinkableProperty, Vector2 } from '@/types/keyframe'
+import { isDirectLinkableProperty, isVectorAnimatableProperty } from '@/types/keyframe'
 
 export type ExpressionValue = number | Vector2
 
@@ -13,10 +7,7 @@ export interface PropertyExpressionContext {
   preValue: ExpressionValue
   globalFrame: number
   fps: number
-  resolveProperty: (
-    itemId: string,
-    property: DirectLinkableProperty,
-  ) => ExpressionValue | null
+  resolveProperty: (itemId: string, property: DirectLinkableProperty) => ExpressionValue | null
 }
 
 export interface PropertyExpressionResult {
@@ -46,9 +37,7 @@ function isVector(value: ExpressionValue): value is Vector2 {
 }
 
 function mapUnary(value: ExpressionValue, operation: (input: number) => number): ExpressionValue {
-  return isVector(value)
-    ? { x: operation(value.x), y: operation(value.y) }
-    : operation(value)
+  return isVector(value) ? { x: operation(value.x), y: operation(value.y) } : operation(value)
 }
 
 function mapBinary(
@@ -160,7 +149,10 @@ function evaluateMinMaxCall(name: 'min' | 'max', args: ExpressionValue[]) {
 }
 
 type ScalarRequirement = (value: ExpressionValue, label: string) => number
-type BuiltinEvaluator = (args: ExpressionValue[], requireScalar: ScalarRequirement) => ExpressionValue
+type BuiltinEvaluator = (
+  args: ExpressionValue[],
+  requireScalar: ScalarRequirement,
+) => ExpressionValue
 
 function evaluateClampCall(args: ExpressionValue[]): ExpressionValue {
   if (args.length !== 3) throw new Error('clamp expects 3 arguments')
@@ -251,10 +243,7 @@ class Parser {
     while (this.current().value === '*' || this.current().value === '/') {
       const operator = this.consume().value
       const right = this.parseUnary()
-      if (
-        operator === '/' &&
-        (isVector(right) ? right.x === 0 || right.y === 0 : right === 0)
-      ) {
+      if (operator === '/' && (isVector(right) ? right.x === 0 || right.y === 0 : right === 0)) {
         throw new Error('Division by zero')
       }
       value = mapBinary(value, right, operator === '*' ? (a, b) => a * b : (a, b) => a / b)

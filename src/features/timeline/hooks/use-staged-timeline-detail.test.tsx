@@ -30,9 +30,7 @@ function DetailProbe({
 }
 
 function flushOneAnimationFrame(frameDuration = 16) {
-  const entry = animationFrames.entries().next().value as
-    | [number, FrameRequestCallback]
-    | undefined
+  const entry = animationFrames.entries().next().value as [number, FrameRequestCallback] | undefined
   if (!entry) return
   animationFrames.delete(entry[0])
   animationFrameTimestamp += frameDuration
@@ -103,8 +101,10 @@ describe('useStagedTimelineDetailIds', () => {
     act(flushOneAnimationFrame)
     act(flushOneAnimationFrame)
 
-    const firstCount = screen.getByTestId('first').textContent?.split(',').filter(Boolean).length ?? 0
-    const secondCount = screen.getByTestId('second').textContent?.split(',').filter(Boolean).length ?? 0
+    const firstCount =
+      screen.getByTestId('first').textContent?.split(',').filter(Boolean).length ?? 0
+    const secondCount =
+      screen.getByTestId('second').textContent?.split(',').filter(Boolean).length ?? 0
     expect(firstCount + secondCount).toBe(MIN_TIMELINE_DETAIL_PROMOTION_BATCH_SIZE * 2)
     expect(firstCount).toBeGreaterThan(0)
     expect(secondCount).toBeGreaterThan(0)

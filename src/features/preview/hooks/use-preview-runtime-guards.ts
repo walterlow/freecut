@@ -44,8 +44,7 @@ export function usePreviewRuntimeGuards({
       const isInteracting = activeGizmo !== null
       isGizmoInteractingRef.current = isInteracting
       preferPlayerForDomGizmoRef.current =
-        isInteracting &&
-        shouldPreferDomPlayerForGizmo(forceFastScrubOverlay, activeGizmo?.itemType)
+        isInteracting && shouldPreferDomPlayerForGizmo(forceFastScrubOverlay, activeGizmo?.itemType)
 
       if (isInteracting && !wasInteracting) {
         // Clear stale hover-scrub state without rerendering the large preview

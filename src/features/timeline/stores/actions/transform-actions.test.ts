@@ -89,10 +89,8 @@ describe('transform actions', () => {
 
       expect(useItemsStore.getState().items).toBe(itemsBefore)
       expect(
-        useKeyframesStore
-          .getState()
-          .getKeyframesForItem('a')
-          ?.vectorProperties?.[0]?.keyframes[0]?.value,
+        useKeyframesStore.getState().getKeyframesForItem('a')?.vectorProperties?.[0]?.keyframes[0]
+          ?.value,
       ).toEqual({ x: 40, y: 50 })
     })
 
@@ -119,10 +117,8 @@ describe('transform actions', () => {
 
       expect(useTimelineCommandStore.getState().undoStack.length).toBe(undoDepth + 1)
       expect(
-        useKeyframesStore
-          .getState()
-          .getKeyframesForItem('a')
-          ?.vectorProperties?.[0]?.keyframes[0]?.value,
+        useKeyframesStore.getState().getKeyframesForItem('a')?.vectorProperties?.[0]?.keyframes[0]
+          ?.value,
       ).toEqual({ x: 40, y: 50 })
       expect(getTransform('a').rotation).toBe(12)
 
@@ -275,9 +271,7 @@ describe('transform actions', () => {
         timeOffsetFrames: 0,
       })
 
-      expect(
-        useKeyframesStore.getState().keyframesByItemId['b']?.propertyLinks,
-      ).toBeUndefined()
+      expect(useKeyframesStore.getState().keyframesByItemId['b']?.propertyLinks).toBeUndefined()
     })
 
     it('blocks parenting when the child already links transform channels to that parent', () => {
@@ -310,9 +304,7 @@ describe('transform actions', () => {
         timeOffsetFrames: 0,
       })
 
-      expect(
-        useKeyframesStore.getState().keyframesByItemId['a']?.propertyLinks,
-      ).toBeUndefined()
+      expect(useKeyframesStore.getState().keyframesByItemId['a']?.propertyLinks).toBeUndefined()
     })
 
     it('allows non-inherited property links to an existing parent', () => {

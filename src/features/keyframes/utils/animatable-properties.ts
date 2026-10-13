@@ -65,9 +65,7 @@ export function getAnimatablePropertiesForItem(item: TimelineItem): AnimatablePr
         'taperEndWidth',
         'taperStartLength',
         'taperEndLength',
-        ...(item.shapeType === 'path'
-          ? getPathVertexAnimatableProperties(item.pathVertices)
-          : []),
+        ...(item.shapeType === 'path' ? getPathVertexAnimatableProperties(item.pathVertices) : []),
         ...effectProperties,
       ]
     case 'controller':
