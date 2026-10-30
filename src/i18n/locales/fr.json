@@ -60,7 +60,21 @@
     "saveAria": "Enregistrer le projet",
     "export": "Exporter",
     "exportVideo": "Exporter la vidéo",
-    "downloadProjectZip": "Télécharger le projet (.zip)"
+    "downloadProjectZip": "Télécharger le projet (.zip)",
+    "layout": {
+      "label": "Disposition",
+      "position": "Position : {{surface}}",
+      "timeline": "Timeline",
+      "grading": "Panneau colorimétrique",
+      "bottom": "Bas",
+      "right": "Droite",
+      "top": "Haut",
+      "left": "Gauche",
+      "edit": "Modifier la disposition",
+      "reset": "Réinitialiser la disposition",
+      "instructions": "Faites glisser {{surface}} vers une position ou sélectionnez-en une.",
+      "resize": "Redimensionner les panneaux"
+    }
   },
   "unsavedChanges": {
     "title": "Modifications non enregistrées",

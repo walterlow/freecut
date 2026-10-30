@@ -8,6 +8,7 @@
  * by the editor store (`editor:workspaceLayout:<id>` in localStorage).
  */
 export type EditorWorkspaceId = 'edit' | 'color' | 'motion'
+export type EditorPanelPosition = 'bottom' | 'right' | 'top' | 'left'
 
 export type EditorSidebarTab =
   | 'media'
@@ -22,6 +23,7 @@ export type EditorClipInspectorTab = 'video' | 'motion' | 'audio' | 'effects'
 
 /** The slice of editor UI state that a workspace controls. */
 export interface EditorWorkspaceLayout {
+  panelPosition: EditorPanelPosition
   colorScopesOpen: boolean
   clipInspectorTab: EditorClipInspectorTab
   activeTab: EditorSidebarTab
@@ -30,12 +32,14 @@ export interface EditorWorkspaceLayout {
 
 const EDITOR_WORKSPACE_PRESETS: Record<EditorWorkspaceId, EditorWorkspaceLayout> = {
   edit: {
+    panelPosition: 'bottom',
     colorScopesOpen: false,
     clipInspectorTab: 'video',
     activeTab: 'media',
     propertiesFullColumn: false,
   },
   color: {
+    panelPosition: 'bottom',
     colorScopesOpen: true,
     clipInspectorTab: 'effects',
     activeTab: 'effects',
@@ -44,6 +48,7 @@ const EDITOR_WORKSPACE_PRESETS: Record<EditorWorkspaceId, EditorWorkspaceLayout>
     propertiesFullColumn: true,
   },
   motion: {
+    panelPosition: 'bottom',
     colorScopesOpen: false,
     clipInspectorTab: 'video',
     activeTab: 'media',
@@ -52,13 +57,13 @@ const EDITOR_WORKSPACE_PRESETS: Record<EditorWorkspaceId, EditorWorkspaceLayout>
 }
 
 /**
- * Timeline split (percent of vertical space) a workspace starts with.
- * `null` means "use the density preset default" — grading navigates clips
- * rather than editing them, so the color workspace shrinks the timeline.
+ * Size (percent of vertical space) of the secondary surface below or above
+ * the preview. `null` means "use the density preset default" — in Color the
+ * secondary surface is the grading dock, which needs more room than a timeline.
  */
 export const EDITOR_WORKSPACE_TIMELINE_SIZE: Record<EditorWorkspaceId, number | null> = {
   edit: null,
-  color: 18,
+  color: 37,
   // Motion reuses the standard split and swaps only the timeline surface.
   motion: null,
 }
@@ -109,6 +114,13 @@ export function normalizeEditorWorkspaceLayout(
   const candidate = value as Partial<Record<keyof EditorWorkspaceLayout, unknown>>
 
   return {
+    panelPosition:
+      candidate.panelPosition === 'top' ||
+      candidate.panelPosition === 'left' ||
+      candidate.panelPosition === 'right' ||
+      candidate.panelPosition === 'bottom'
+        ? candidate.panelPosition
+        : preset.panelPosition,
     colorScopesOpen:
       typeof candidate.colorScopesOpen === 'boolean'
         ? candidate.colorScopesOpen

@@ -55,6 +55,7 @@ const page = {
             'The **Motion** workspace combines layered compositions, keyframes, graphs, presets, and procedural animation — see [Motion Workspace](motion).',
             'Select a visual clip in Edit and open **Animation** in Properties for common presets, applied-animation status, text motion, and **Create Motion Clip**.',
             'Switch workspaces from the center toolbar tabs, or use `Alt+1`, `Alt+2`, and `Alt+3`.',
+            'Use **Layout** between Settings and Keyboard Shortcuts to place the timeline above, below, left, or right of the preview. In Color, this moves the grading panel. Choose **Edit layout** to drag the panel or select a position; **Reset layout** restores the default split for the current workspace.',
           ],
         },
       ],

@@ -27,6 +27,9 @@ describe('editor-store', () => {
     useEditorStore.setState({
       activePanel: null,
       workspace: 'edit',
+      panelPosition: 'bottom',
+      layoutEditing: false,
+      layoutResetVersion: 0,
       leftSidebarOpen: true,
       rightSidebarOpen: true,
       keyframeEditorShortcutScopeActive: false,
@@ -230,7 +233,33 @@ describe('editor-store', () => {
       clipInspectorTab: 'audio',
       colorScopesOpen: false,
       propertiesFullColumn: false,
+      panelPosition: 'bottom',
     })
+  })
+
+  it('remembers panel position independently for each workspace', () => {
+    useEditorStore.getState().setPanelPosition('right')
+    useEditorStore.getState().setWorkspace('motion')
+    expect(useEditorStore.getState().panelPosition).toBe('bottom')
+    useEditorStore.getState().setPanelPosition('left')
+    useEditorStore.getState().setWorkspace('edit')
+    expect(useEditorStore.getState().panelPosition).toBe('right')
+    useEditorStore.getState().setWorkspace('motion')
+    expect(useEditorStore.getState().panelPosition).toBe('left')
+  })
+
+  it('resets the active workspace layout and its saved split sizes', () => {
+    useEditorStore.getState().setPanelPosition('right')
+    localStorage.setItem('react-resizable-panels:editor:panels:edit:right', 'saved')
+    localStorage.setItem('react-resizable-panels:editor:panels:motion:right', 'other workspace')
+    useEditorStore.getState().setLayoutEditing(true)
+    useEditorStore.getState().resetPanelLayout()
+    expect(useEditorStore.getState().panelPosition).toBe('bottom')
+    expect(useEditorStore.getState().layoutEditing).toBe(false)
+    expect(localStorage.getItem('react-resizable-panels:editor:panels:edit:right')).toBeNull()
+    expect(localStorage.getItem('react-resizable-panels:editor:panels:motion:right')).toBe(
+      'other workspace',
+    )
   })
 
   it('ignores setWorkspace for the active workspace', () => {

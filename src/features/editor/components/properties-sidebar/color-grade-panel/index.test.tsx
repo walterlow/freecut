@@ -88,6 +88,15 @@ describe('ColorGradePanel', () => {
     expect(keyframePanel).toHaveAttribute('data-property-column-width', '336')
   })
 
+  it('stacks the dock panes so the graph keeps its full width beside the preview', async () => {
+    render(<ColorGradePanel layout="dock" stacked />)
+
+    await screen.findByTestId('color-grade-section', {}, { timeout: 5000 })
+    const lane = screen.getByTestId('color-keyframes-lane')
+    expect(lane.parentElement).toHaveAttribute('data-stacked', 'true')
+    expect(lane.parentElement?.className).toContain('grid-cols-1')
+  })
+
   it('keeps the sidebar variant stacked without the dock graph lane', async () => {
     render(<ColorGradePanel />)
 

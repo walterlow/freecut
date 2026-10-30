@@ -60,7 +60,21 @@
     "saveAria": "프로젝트 저장",
     "export": "내보내기",
     "exportVideo": "동영상 내보내기",
-    "downloadProjectZip": "프로젝트 다운로드 (.zip)"
+    "downloadProjectZip": "프로젝트 다운로드 (.zip)",
+    "layout": {
+      "label": "레이아웃",
+      "position": "{{surface}} 위치",
+      "timeline": "타임라인",
+      "grading": "색 보정 패널",
+      "bottom": "아래",
+      "right": "오른쪽",
+      "top": "위",
+      "left": "왼쪽",
+      "edit": "레이아웃 편집",
+      "reset": "레이아웃 초기화",
+      "instructions": "{{surface}}을 원하는 위치로 드래그하거나 위치를 선택하세요.",
+      "resize": "패널 크기 조절"
+    }
   },
   "unsavedChanges": {
     "title": "저장하지 않은 변경 사항",

@@ -2,6 +2,7 @@ import type {
   EditorClipInspectorTab,
   EditorSidebarTab,
   EditorWorkspaceId,
+  EditorPanelPosition,
 } from '@/config/editor-workspaces'
 export type ClipInspectorTab = EditorClipInspectorTab
 
@@ -16,6 +17,9 @@ export interface EditorState {
   /** True while the transcript editor owns Delete/Backspace (pointer or focus within). */
   transcriptEditorShortcutScopeActive: boolean
   workspace: EditorWorkspaceId
+  panelPosition: EditorPanelPosition
+  layoutResetVersion: number
+  layoutEditing: boolean
   activeTab: EditorSidebarTab
   clipInspectorTab: ClipInspectorTab
   sidebarWidth: number
@@ -48,6 +52,9 @@ export interface EditorActions {
   toggleLeftSidebar: () => void
   toggleRightSidebar: () => void
   setWorkspace: (workspace: EditorWorkspaceId) => void
+  setPanelPosition: (position: EditorPanelPosition) => void
+  resetPanelLayout: () => void
+  setLayoutEditing: (editing: boolean) => void
   setActiveTab: (tab: EditorSidebarTab) => void
   setClipInspectorTab: (tab: ClipInspectorTab) => void
   setSidebarWidth: (width: number) => void

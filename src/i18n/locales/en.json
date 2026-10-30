@@ -60,7 +60,21 @@
     "saveAria": "Save project",
     "export": "Export",
     "exportVideo": "Export Video",
-    "downloadProjectZip": "Download Project (.zip)"
+    "downloadProjectZip": "Download Project (.zip)",
+    "layout": {
+      "label": "Layout",
+      "position": "{{surface}} position",
+      "timeline": "Timeline",
+      "grading": "Grading panel",
+      "bottom": "Bottom",
+      "right": "Right",
+      "top": "Top",
+      "left": "Left",
+      "edit": "Edit layout",
+      "reset": "Reset layout",
+      "instructions": "Drag {{surface}} to a position, or select a position.",
+      "resize": "Resize editor panels"
+    }
   },
   "unsavedChanges": {
     "title": "Unsaved Changes",

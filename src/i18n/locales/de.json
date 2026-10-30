@@ -60,7 +60,21 @@
     "saveAria": "Projekt speichern",
     "export": "Exportieren",
     "exportVideo": "Video exportieren",
-    "downloadProjectZip": "Projekt herunterladen (.zip)"
+    "downloadProjectZip": "Projekt herunterladen (.zip)",
+    "layout": {
+      "label": "Layout",
+      "position": "Position: {{surface}}",
+      "timeline": "Zeitleiste",
+      "grading": "Farbkorrektur",
+      "bottom": "Unten",
+      "right": "Rechts",
+      "top": "Oben",
+      "left": "Links",
+      "edit": "Layout bearbeiten",
+      "reset": "Layout zurücksetzen",
+      "instructions": "Ziehe {{surface}} an eine Position oder wähle eine Position aus.",
+      "resize": "Editorbereiche in der Größe ändern"
+    }
   },
   "unsavedChanges": {
     "title": "Nicht gespeicherte Änderungen",

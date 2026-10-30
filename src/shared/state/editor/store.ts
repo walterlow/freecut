@@ -72,6 +72,7 @@ function loadEditorWorkspaceLayout(workspace: EditorWorkspaceId): EditorWorkspac
 
 function getEditorWorkspaceLayoutSnapshot(state: EditorState): EditorWorkspaceLayout {
   return {
+    panelPosition: state.panelPosition,
     colorScopesOpen: state.colorScopesOpen,
     clipInspectorTab: state.clipInspectorTab,
     activeTab: state.activeTab,
@@ -127,6 +128,9 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   keyframeEditorShortcutScopeActive: false,
   transcriptEditorShortcutScopeActive: false,
   workspace: initialWorkspace,
+  panelPosition: initialWorkspaceLayout.panelPosition,
+  layoutResetVersion: 0,
+  layoutEditing: false,
   activeTab: initialWorkspaceLayout.activeTab,
   clipInspectorTab: initialWorkspaceLayout.clipInspectorTab,
   sidebarWidth: loadSidebarWidth('editor:sidebarWidth', EDITOR_LAYOUT.leftSidebarDefaultWidth),
@@ -196,7 +200,47 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
         /* noop */
       }
 
-      return { workspace, ...loadEditorWorkspaceLayout(workspace) }
+      return { workspace, layoutEditing: false, ...loadEditorWorkspaceLayout(workspace) }
+    }),
+  setLayoutEditing: (layoutEditing) => set({ layoutEditing }),
+  setPanelPosition: (panelPosition) =>
+    set((state) => {
+      if (state.panelPosition === panelPosition) return state
+      // Changing the split remounts its surfaces. Stop the clock first.
+      usePlaybackStore.getState().pause()
+      usePlaybackStore.getState().setPreviewFrame(null)
+      saveEditorWorkspaceLayout(
+        state.workspace,
+        getEditorWorkspaceLayoutSnapshot({ ...state, panelPosition }),
+      )
+      return { panelPosition }
+    }),
+  resetPanelLayout: () =>
+    set((state) => {
+      usePlaybackStore.getState().pause()
+      usePlaybackStore.getState().setPreviewFrame(null)
+      try {
+        for (const position of ['bottom', 'top', 'left', 'right']) {
+          localStorage.removeItem(
+            `react-resizable-panels:editor:panels:${state.workspace}:${position}`,
+          )
+        }
+        if (state.workspace === 'edit')
+          localStorage.removeItem('react-resizable-panels:editor:timeline-layout')
+        localStorage.removeItem(`editor:workspaceTimelineSize:${state.workspace}`)
+      } catch {
+        /* Storage may be unavailable. The in-memory reset still applies. */
+      }
+      const panelPosition = 'bottom' as const
+      saveEditorWorkspaceLayout(
+        state.workspace,
+        getEditorWorkspaceLayoutSnapshot({ ...state, panelPosition }),
+      )
+      return {
+        panelPosition,
+        layoutEditing: false,
+        layoutResetVersion: state.layoutResetVersion + 1,
+      }
     }),
   setActiveTab: (tab) =>
     set((state) => {

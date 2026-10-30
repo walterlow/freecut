@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   syncSidebarLayout: vi.fn(),
   editorState: {
     workspace: 'edit',
+    panelPosition: 'bottom',
     propertiesFullColumn: false,
     mediaFullColumn: false,
   },
@@ -85,7 +86,9 @@ vi.mock('./preview-area', () => ({
 }))
 
 vi.mock('./color-grading-dock', () => ({
-  ColorGradingDock: () => <div data-testid="color-grading-dock" />,
+  ColorGradingDock: ({ stacked }: { stacked?: boolean }) => (
+    <div data-testid="color-grading-dock" data-stacked={String(Boolean(stacked))} />
+  ),
 }))
 
 vi.mock('./color-timeline-navigator', () => ({
@@ -236,6 +239,7 @@ vi.mock('@/shared/state/editor', () => ({
       propertiesFullColumn: boolean
       mediaFullColumn: boolean
       workspace: string
+      panelPosition: string
     }) => unknown,
   ) =>
     selector({
@@ -243,6 +247,7 @@ vi.mock('@/shared/state/editor', () => ({
       propertiesFullColumn: mocks.editorState.propertiesFullColumn,
       mediaFullColumn: mocks.editorState.mediaFullColumn,
       workspace: mocks.editorState.workspace,
+      panelPosition: mocks.editorState.panelPosition,
     }),
 }))
 
@@ -313,6 +318,7 @@ describe('LoadedEditor migration metadata refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.editorState.workspace = 'edit'
+    mocks.editorState.panelPosition = 'bottom'
     mocks.editorState.propertiesFullColumn = false
     mocks.editorState.mediaFullColumn = false
     mocks.loadTimeline.mockResolvedValue(undefined)
@@ -424,7 +430,29 @@ describe('LoadedEditor migration metadata refresh', () => {
     )
   })
 
-  it('mounts the compact color navigator and fixed grading dock in the color workspace', async () => {
+  it('renders the timeline on the left in a horizontal split', async () => {
+    mocks.editorState.panelPosition = 'left'
+    render(
+      <LoadedEditor
+        projectId="project-1"
+        project={{ id: 'project-1', name: 'Project', width: 1920, height: 1080, fps: 30 }}
+        migration={{ storedSchemaVersion: 9, currentSchemaVersion: 9, requiresUpgrade: false }}
+      />,
+    )
+    const timeline = await screen.findByTestId('timeline')
+    const preview = screen.getByTestId('preview-area')
+    expect(
+      timeline.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(mocks.resizablePanelGroup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        direction: 'horizontal',
+        autoSaveId: 'editor:panels:edit:left',
+      }),
+    )
+  })
+
+  it('mounts the compact color navigator and grading dock in the color workspace', async () => {
     mocks.editorState.workspace = 'color'
     mocks.editorState.propertiesFullColumn = true
 
@@ -446,10 +474,26 @@ describe('LoadedEditor migration metadata refresh', () => {
       />,
     )
 
-    expect(await screen.findByTestId('color-grading-dock')).toBeInTheDocument()
+    expect(await screen.findByTestId('color-grading-dock')).toHaveAttribute('data-stacked', 'false')
     expect(screen.getByTestId('color-timeline-navigator')).toBeInTheDocument()
     expect(screen.queryByTestId('timeline')).not.toBeInTheDocument()
     expect(screen.queryByTestId('properties-sidebar')).not.toBeInTheDocument()
+  })
+
+  it('stacks the grading dock when it sits beside the preview', async () => {
+    mocks.editorState.workspace = 'color'
+    mocks.editorState.panelPosition = 'right'
+    mocks.editorState.propertiesFullColumn = true
+
+    render(
+      <LoadedEditor
+        projectId="project-1"
+        project={{ id: 'project-1', name: 'Color Project', width: 1920, height: 1080, fps: 30 }}
+        migration={{ storedSchemaVersion: 9, currentSchemaVersion: 9, requiresUpgrade: false }}
+      />,
+    )
+
+    expect(await screen.findByTestId('color-grading-dock')).toHaveAttribute('data-stacked', 'true')
   })
 
   it('mounts Motion in the shared editor shell and swaps only the classic Timeline', async () => {

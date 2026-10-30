@@ -60,7 +60,21 @@
     "saveAria": "Projeyi kaydet",
     "export": "Dışa Aktar",
     "exportVideo": "Videoyu Dışa Aktar",
-    "downloadProjectZip": "Projeyi İndir (.zip)"
+    "downloadProjectZip": "Projeyi İndir (.zip)",
+    "layout": {
+      "label": "Düzen",
+      "position": "{{surface}} konumu",
+      "timeline": "Zaman çizelgesi",
+      "grading": "Renk paneli",
+      "bottom": "Alt",
+      "right": "Sağ",
+      "top": "Üst",
+      "left": "Sol",
+      "edit": "Düzeni düzenle",
+      "reset": "Düzeni sıfırla",
+      "instructions": "{{surface}} öğesini bir konuma sürükleyin veya bir konum seçin.",
+      "resize": "Panelleri yeniden boyutlandır"
+    }
   },
   "unsavedChanges": {
     "title": "Kaydedilmemiş Değişiklikler",

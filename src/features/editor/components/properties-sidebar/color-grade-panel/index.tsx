@@ -30,10 +30,16 @@ const COLOR_KEYFRAME_PROPERTY_COLUMN_WIDTH = 336
 
 interface ColorGradePanelProps {
   layout?: 'sidebar' | 'dock'
+  /**
+   * Dock only: stack the grade, effects and keyframe panes vertically. Used when
+   * the dock sits beside the preview, where three columns leave the graph no width.
+   */
+  stacked?: boolean
 }
 
 export const ColorGradePanel = memo(function ColorGradePanel({
   layout = 'sidebar',
+  stacked = false,
 }: ColorGradePanelProps) {
   const { t } = useTranslation()
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds)
@@ -78,7 +84,14 @@ export const ColorGradePanel = memo(function ColorGradePanel({
 
   if (layout === 'dock') {
     return (
-      <div className="grid h-full min-h-0 grid-cols-[minmax(0,10fr)_minmax(0,3fr)_minmax(0,7fr)] gap-3">
+      <div
+        className={
+          stacked
+            ? 'grid min-h-full grid-cols-1 grid-rows-[minmax(22rem,5fr)_minmax(8rem,2fr)_minmax(16rem,4fr)] gap-3'
+            : 'grid h-full min-h-0 grid-cols-[minmax(0,10fr)_minmax(0,3fr)_minmax(0,7fr)] gap-3'
+        }
+        data-stacked={stacked}
+      >
         <Suspense fallback={null}>
           <div className={sectionClassName}>
             <LazyColorGradeSection

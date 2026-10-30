@@ -60,7 +60,21 @@
     "saveAria": "Guardar proyecto",
     "export": "Exportar",
     "exportVideo": "Exportar vídeo",
-    "downloadProjectZip": "Descargar proyecto (.zip)"
+    "downloadProjectZip": "Descargar proyecto (.zip)",
+    "layout": {
+      "label": "Diseño",
+      "position": "Posición: {{surface}}",
+      "timeline": "Línea de tiempo",
+      "grading": "Panel de color",
+      "bottom": "Abajo",
+      "right": "Derecha",
+      "top": "Arriba",
+      "left": "Izquierda",
+      "edit": "Editar diseño",
+      "reset": "Restablecer diseño",
+      "instructions": "Arrastra {{surface}} a una posición o selecciona una.",
+      "resize": "Cambiar tamaño de los paneles"
+    }
   },
   "unsavedChanges": {
     "title": "Cambios sin guardar",

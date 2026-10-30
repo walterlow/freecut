@@ -60,7 +60,21 @@
     "saveAria": "プロジェクトを保存",
     "export": "書き出し",
     "exportVideo": "動画を書き出し",
-    "downloadProjectZip": "プロジェクトをダウンロード (.zip)"
+    "downloadProjectZip": "プロジェクトをダウンロード (.zip)",
+    "layout": {
+      "label": "レイアウト",
+      "position": "{{surface}}の位置",
+      "timeline": "タイムライン",
+      "grading": "カラー調整パネル",
+      "bottom": "下",
+      "right": "右",
+      "top": "上",
+      "left": "左",
+      "edit": "レイアウトを編集",
+      "reset": "レイアウトをリセット",
+      "instructions": "{{surface}}を位置までドラッグするか、位置を選択してください。",
+      "resize": "パネルのサイズを変更"
+    }
   },
   "unsavedChanges": {
     "title": "未保存の変更",

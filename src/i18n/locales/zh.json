@@ -60,7 +60,21 @@
     "saveAria": "保存项目",
     "export": "导出",
     "exportVideo": "导出视频",
-    "downloadProjectZip": "下载项目 (.zip)"
+    "downloadProjectZip": "下载项目 (.zip)",
+    "layout": {
+      "label": "布局",
+      "position": "{{surface}}位置",
+      "timeline": "时间线",
+      "grading": "调色面板",
+      "bottom": "下方",
+      "right": "右侧",
+      "top": "上方",
+      "left": "左侧",
+      "edit": "编辑布局",
+      "reset": "重置布局",
+      "instructions": "将{{surface}}拖到目标位置，或选择一个位置。",
+      "resize": "调整面板大小"
+    }
   },
   "unsavedChanges": {
     "title": "未保存的更改",
