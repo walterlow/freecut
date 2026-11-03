@@ -409,11 +409,18 @@ export class GlyphAtlasTextPipeline {
       })
       const lineUnits = motionSegmentation?.lineUnitIndices[lineIndex]
       const baselineY = line.baselineY
-      let currentX = line.startX
+      let prefix = ''
       let charIndex = 0
       for (const char of line.text) {
         const metrics = this.ensureGlyph(char, line.cssFont, line.fontSize)
         if (!metrics) return null
+        prefix += char
+        // Match the kerning used by the DOM and settled canvas text.
+        const currentX =
+          line.startX +
+          measurer.measure(prefix, line.cssFont, 0) -
+          metrics.advance +
+          charIndex * line.letterSpacing
         if (char !== ' ') {
           // `lineUnits` is parallel to the line's code points — exactly what
           // this `for (const char of ...)` walk iterates.
@@ -451,7 +458,6 @@ export class GlyphAtlasTextPipeline {
             })
           }
         }
-        currentX += metrics.advance + line.letterSpacing
         charIndex++
       }
       const underlineWidth = lineInkWidth(line)
@@ -524,19 +530,16 @@ export class GlyphAtlasTextPipeline {
   }
 
   /**
-   * Measurer backed by the glyph atlas: widths sum per-glyph advances plus the
-   * trailing letter-spacing (CSS semantics), metrics use the font bounding box
-   * — same line geometry the canvas/DOM paths use.
+   * Measure complete strings so wrapping and alignment preserve kerning, just
+   * like the canvas/DOM paths. Add trailing letter-spacing (CSS semantics).
    */
   private createMeasurer(): TextMeasurer {
     return {
       measure: (text, cssFont, letterSpacing) => {
-        const fontSize = parseFontSizePx(cssFont)
-        let width = 0
-        for (const char of text) {
-          width += this.ensureGlyph(char, cssFont, fontSize)?.advance ?? 0
-        }
-        return width + text.length * letterSpacing
+        this.scratchCtx.font = cssFont
+        this.scratchCtx.fontKerning = 'normal'
+        this.scratchCtx.letterSpacing = '0px'
+        return this.scratchCtx.measureText(text).width + text.length * letterSpacing
       },
       fontMetrics: (cssFont) => this.measureFont(cssFont, parseFontSizePx(cssFont)),
     }
@@ -556,6 +559,8 @@ export class GlyphAtlasTextPipeline {
     if (cached) return cached
 
     this.scratchCtx.font = font
+    this.scratchCtx.fontKerning = 'normal'
+    this.scratchCtx.letterSpacing = '0px'
     this.scratchCtx.textBaseline = 'alphabetic'
     const measured = this.scratchCtx.measureText(char)
     const ascent =

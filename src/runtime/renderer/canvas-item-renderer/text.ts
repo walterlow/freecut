@@ -309,10 +309,18 @@ function paintTextBlockWithMotion(
     // Inline span flow: per-glyph color follows the run covering that char.
     const runColorByChar = line.runs?.flatMap((run) => Array.from(run.text, () => run.color))
     const baselineY = originY + line.baselineY
-    let currentX = originX + line.startX
+    let prefix = ''
     let charIndex = 0
     for (const char of line.text) {
       const advance = ctx.measureText(char).width
+      prefix += char
+      // Include the preceding pair's kerning, as the settled whole-line draw does.
+      const currentX =
+        originX +
+        line.startX +
+        ctx.measureText(prefix).width -
+        advance +
+        charIndex * line.letterSpacing
       if (char !== ' ') {
         const glyphMotion = evaluate(lineUnits?.[charIndex] ?? null, line.fontSize)
         // Fully hidden glyphs (typewriter pre-reveal) emit nothing.
@@ -332,7 +340,6 @@ function paintTextBlockWithMotion(
           )
         }
       }
-      currentX += advance + line.letterSpacing
       charIndex++
     }
 
