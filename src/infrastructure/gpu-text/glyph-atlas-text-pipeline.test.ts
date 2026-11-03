@@ -26,7 +26,7 @@ class MockOffscreenCanvas {
         data: createGlyphPixels(width, height),
       })),
       measureText: vi.fn((text: string) => ({
-        width: text.length * 12,
+        width: text.length * 12 - (text.includes('AV') ? 3 : 0) - (text.includes('To') ? 2 : 0),
         actualBoundingBoxAscent: 16,
         actualBoundingBoxDescent: 4,
         actualBoundingBoxLeft: 0,
@@ -440,6 +440,31 @@ describe('GlyphAtlasTextPipeline', () => {
       },
     }
     const fadeUpMidMotion = { spec: fadeUpSpec, relativeFrame: 5, fps: 30, durationInFrames: 300 }
+
+    it('preserves kerning and alignment when pop hands off to settled text', () => {
+      const item = makeTextItem({ text: 'AV To', letterSpacing: 2 })
+      const spec: TextMotionSpec = {
+        in: {
+          ...createTextMotionEffect('pop'),
+          durationFrames: 10,
+          staggerFrames: 0,
+          intensity: 0,
+          easing: 'linear',
+        },
+      }
+      const { vertexData: animated } = renderVertices(item, {
+        spec,
+        relativeFrame: 5,
+        fps: 30,
+        durationInFrames: 300,
+      })
+      const { vertexData: settled } = renderVertices(item)
+
+      expect(animated).toEqual(settled)
+      // Whole-line width is 60 - 3 - 2 + 5 * 2 = 65; atlas padding is 12.
+      expect(settled[0]).toBeCloseTo((640 - 65) / 2 - 12)
+      expect([0, 1, 2, 3].map((i) => settled[i * 120]! - settled[0]!)).toEqual([0, 11, 39, 51])
+    })
 
     it('skips fully hidden glyphs during a typewriter reveal', () => {
       // typewriter (char unit, duration 1, stagger 2) at frame 1: 'A' (unit 0)
