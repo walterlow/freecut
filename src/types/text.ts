@@ -49,3 +49,27 @@ export type TextVisualStyleFields = {
 }
 
 export type TextStyleFields = TextInlineStyleFields & TextVisualStyleFields
+
+export type TextCounterEasing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out'
+
+/**
+ * Animated number counter ("0% → 100%"). When enabled, the clip's rendered
+ * text is generated per frame as `prefix + formatted value + suffix`; the
+ * stored `text` is left untouched so disabling the counter restores it.
+ *
+ * Without `counterValue` keyframes the value ramps from `from` to `to` across
+ * the clip's duration using `easing`. `counterValue` keyframes, when present,
+ * override the ramp for full timing control.
+ */
+export type TextCounter = {
+  enabled: boolean
+  from: number
+  to: number
+  /** Fraction digits shown (0–4). */
+  decimals: number
+  prefix?: string
+  suffix?: string
+  /** Group thousands with `,` (e.g. 12,500). */
+  thousandsSeparator?: boolean
+  easing: TextCounterEasing
+}

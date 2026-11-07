@@ -142,7 +142,8 @@
       "textShadowOffsetX": "Sombra X",
       "textShadowOffsetY": "Sombra Y",
       "textShadowBlur": "Desfoque da sombra",
-      "strokeWidth": "Largura do traço"
+      "strokeWidth": "Largura do traço",
+      "counterValue": "Valor do contador"
     }
   }
 }

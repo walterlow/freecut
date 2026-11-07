@@ -783,6 +783,25 @@
         "swing": "スイング"
       }
     },
+    "textCounter": {
+      "sectionTitle": "カウンター",
+      "enable": "カウンター",
+      "hint": "テキストをクリップ全体でカウントする数値に置き換えます。独自のタイミングには値のキーフレームを追加します。",
+      "from": "開始",
+      "to": "終了",
+      "decimals": "小数桁",
+      "prefix": "接頭辞",
+      "suffix": "接尾辞",
+      "separator": "桁区切り",
+      "easing": "イージング",
+      "value": "値",
+      "easings": {
+        "linear": "リニア",
+        "ease-in": "イーズイン",
+        "ease-out": "イーズアウト",
+        "ease-in-out": "イーズインアウト"
+      }
+    },
     "tts": {
       "seek": "シーク",
       "dialogTitle": "テキストから音声を生成",

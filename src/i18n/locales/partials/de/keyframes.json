@@ -142,7 +142,8 @@
       "textShadowOffsetX": "Schatten X",
       "textShadowOffsetY": "Schatten Y",
       "textShadowBlur": "Schattenunschärfe",
-      "strokeWidth": "Konturbreite"
+      "strokeWidth": "Konturbreite",
+      "counterValue": "Zählerwert"
     }
   }
 }

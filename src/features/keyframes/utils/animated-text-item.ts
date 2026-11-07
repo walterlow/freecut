@@ -2,6 +2,10 @@ import type { BuiltInAnimatableProperty, ItemKeyframes } from '@/types/keyframe'
 import type { TextItem } from '@/types/timeline'
 import type { CanvasSettings } from '@/types/transform'
 import { applyTextStylePresetToItem } from '@/shared/typography/text-style-presets'
+import {
+  formatTextCounterValue,
+  getTextCounterRampValue,
+} from '@/shared/typography/text-counter'
 import { getPropertyKeyframes, interpolatePropertyValue } from './interpolation'
 
 export type TextAnimatableProperty =
@@ -14,6 +18,7 @@ export type TextAnimatableProperty =
   | 'textShadowOffsetY'
   | 'textShadowBlur'
   | 'strokeWidth'
+  | 'counterValue'
 
 export const TEXT_ANIMATABLE_PROPERTIES: TextAnimatableProperty[] = [
   'textStyleScale',
@@ -25,6 +30,7 @@ export const TEXT_ANIMATABLE_PROPERTIES: TextAnimatableProperty[] = [
   'textShadowOffsetY',
   'textShadowBlur',
   'strokeWidth',
+  'counterValue',
 ]
 
 const TEXT_ANIMATABLE_PROPERTY_SET = new Set<TextAnimatableProperty>(TEXT_ANIMATABLE_PROPERTIES)
@@ -40,6 +46,7 @@ const TEXT_ANIMATABLE_BASE_VALUE: Record<TextAnimatableProperty, (item: TextItem
   textShadowOffsetY: (item) => item.textShadow?.offsetY ?? 0,
   textShadowBlur: (item) => item.textShadow?.blur ?? 0,
   strokeWidth: (item) => item.stroke?.width ?? 0,
+  counterValue: (item) => item.textCounter?.from ?? 0,
 }
 
 export function isTextAnimatableProperty(
@@ -202,6 +209,45 @@ function resolveStroke(
   })
 }
 
+/**
+ * Current numeric value of an enabled text counter: `counterValue` keyframes
+ * when present, otherwise the eased `from` → `to` ramp across the clip.
+ * Returns undefined when the item has no enabled counter.
+ */
+export function resolveTextCounterValue(
+  item: TextItem,
+  itemKeyframes: ItemKeyframes | undefined,
+  frame: number,
+): number | undefined {
+  const counter = item.textCounter
+  if (!counter?.enabled) return undefined
+
+  const keyframes = getPropertyKeyframes(itemKeyframes, 'counterValue')
+  if (keyframes.length > 0) {
+    return interpolatePropertyValue(keyframes, frame, counter.from)
+  }
+  return getTextCounterRampValue(counter, frame, item.durationInFrames)
+}
+
+function applyTextCounter(
+  item: TextItem,
+  itemKeyframes: ItemKeyframes | undefined,
+  frame: number,
+): TextItem {
+  const value = resolveTextCounterValue(item, itemKeyframes, frame)
+  if (value === undefined || !item.textCounter) return item
+
+  const text = formatTextCounterValue(item.textCounter, value)
+  // Structured spans render instead of `text`; keep the first span's styling
+  // so a styled counter still shows the generated number.
+  const firstSpan = item.textSpans?.[0]
+  return {
+    ...item,
+    text,
+    textSpans: firstSpan ? [{ ...firstSpan, text }] : undefined,
+  }
+}
+
 export function resolveAnimatedTextItem(
   item: TextItem,
   itemKeyframes: ItemKeyframes | undefined,
@@ -215,7 +261,11 @@ export function resolveAnimatedTextItem(
   ) => resolveTextAnimation(item, itemKeyframes, frame, property, fallback, minimum)
 
   const scale = resolveProperty('textStyleScale', item.textStyleScale)
-  const resolved = resolvePresetTextItem(item, canvas, scale)
+  const resolved = applyTextCounter(
+    resolvePresetTextItem(item, canvas, scale),
+    itemKeyframes,
+    frame,
+  )
 
   const fontSize = resolveProperty('fontSize', resolved.fontSize, 1)
   const lineHeight = resolveProperty('lineHeight', resolved.lineHeight, 0.1)

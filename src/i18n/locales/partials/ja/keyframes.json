@@ -142,7 +142,8 @@
       "textShadowOffsetX": "影 X",
       "textShadowOffsetY": "影 Y",
       "textShadowBlur": "影のぼかし",
-      "strokeWidth": "ストローク幅"
+      "strokeWidth": "ストローク幅",
+      "counterValue": "カウンター値"
     }
   }
 }

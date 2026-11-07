@@ -140,4 +140,63 @@ describe('resolveAnimatedTextItem', () => {
     expect(resolved.textShadow).toBeUndefined()
     expect(resolved.stroke).toBeUndefined()
   })
+
+  describe('text counter', () => {
+    const counter = {
+      enabled: true,
+      from: 0,
+      to: 100,
+      decimals: 0,
+      suffix: '%',
+      easing: 'linear' as const,
+    }
+
+    it('ramps from `from` to `to` across the clip without keyframes', () => {
+      const item = createTextItem({ durationInFrames: 101, textCounter: counter })
+
+      expect(resolveAnimatedTextItem(item, undefined, 0, canvas).text).toBe('0%')
+      expect(resolveAnimatedTextItem(item, undefined, 50, canvas).text).toBe('50%')
+      expect(resolveAnimatedTextItem(item, undefined, 100, canvas).text).toBe('100%')
+    })
+
+    it('lets counterValue keyframes override the ramp', () => {
+      const item = createTextItem({ textCounter: counter })
+      const keyframes: ItemKeyframes = {
+        itemId: item.id,
+        properties: [
+          {
+            property: 'counterValue',
+            keyframes: [
+              { id: 'kf-1', frame: 0, value: 10, easing: 'linear' },
+              { id: 'kf-2', frame: 20, value: 30, easing: 'linear' },
+            ],
+          },
+        ],
+      }
+
+      expect(resolveAnimatedTextItem(item, keyframes, 10, canvas).text).toBe('20%')
+      expect(resolveAnimatedTextItem(item, keyframes, 80, canvas).text).toBe('30%')
+    })
+
+    it('leaves the stored text alone when the counter is disabled', () => {
+      const item = createTextItem({ textCounter: { ...counter, enabled: false } })
+
+      expect(resolveAnimatedTextItem(item, undefined, 45, canvas).text).toBe('Hello world')
+    })
+
+    it('keeps the first span styling for span-based clips', () => {
+      const item = createTextItem({
+        durationInFrames: 11,
+        textCounter: counter,
+        textSpans: [
+          { text: 'Big', fontWeight: 'bold', color: '#ff0000' },
+          { text: 'small' },
+        ],
+      })
+
+      const resolved = resolveAnimatedTextItem(item, undefined, 10, canvas)
+
+      expect(resolved.textSpans).toEqual([{ text: '100%', fontWeight: 'bold', color: '#ff0000' }])
+    })
+  })
 })

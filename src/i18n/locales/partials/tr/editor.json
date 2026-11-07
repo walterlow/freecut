@@ -783,6 +783,25 @@
         "swing": "Salla"
       }
     },
+    "textCounter": {
+      "sectionTitle": "Sayaç",
+      "enable": "Sayaç",
+      "hint": "Metni klip boyunca sayan bir sayıyla değiştirir. Özel zamanlama için Değer anahtar kareleri ekleyin.",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "decimals": "Ondalık",
+      "prefix": "Önek",
+      "suffix": "Sonek",
+      "separator": "Binlik ayr.",
+      "easing": "Yumuşatma",
+      "value": "Değer",
+      "easings": {
+        "linear": "Doğrusal",
+        "ease-in": "Yavaş Başla",
+        "ease-out": "Yavaş Bitir",
+        "ease-in-out": "Yavaş Başla/Bitir"
+      }
+    },
     "tts": {
       "seek": "Git",
       "dialogTitle": "Metinden ses oluştur",

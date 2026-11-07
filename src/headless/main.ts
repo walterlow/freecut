@@ -1164,7 +1164,13 @@ async function dumpLayout(input: HeadlessLayoutInput): Promise<HeadlessLayoutRes
         z: z++,
       }
       if (item.type === 'text') {
-        box.text = item.text
+        // Resolved text so generated content (e.g. text counters) reports what renders.
+        box.text = resolveAnimatedTextItem(
+          item,
+          keyframesMap.get(item.id),
+          frame - item.from,
+          canvas,
+        ).text
         box.textAlign = item.textAlign
         box.verticalAlign = item.verticalAlign
         box.fontSize = item.fontSize

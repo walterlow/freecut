@@ -19,6 +19,7 @@ export {
   type AutoKeyframeOperation,
 } from '@/features/keyframes/utils/auto-keyframe'
 export { getAnimatablePropertiesForItem } from '@/features/keyframes/utils/animatable-properties'
+export { resolveTextCounterValue } from '@/features/keyframes/utils/animated-text-item'
 export {
   VECTOR_PROPERTY_PAIRS,
   findStoredVectorKeyframe,

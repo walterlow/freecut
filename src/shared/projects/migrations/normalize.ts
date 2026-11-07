@@ -21,6 +21,7 @@ import { DEFAULT_TRACK_HEIGHT, DEFAULT_FPS } from '@/shared/timeline/defaults'
 import { normalizeAudioEqSettings } from '@/shared/utils/audio-eq'
 import { applyOptionalClamps } from '@/shared/timeline/item-clamps'
 import { sanitizeTextMotion } from './sanitize-text-motion'
+import { sanitizeTextCounter } from '@/shared/typography/text-counter'
 import type { ProjectWarning } from './types'
 
 /**
@@ -86,6 +87,11 @@ function normalizeItem(
   // Motion-text spec: drop malformed slots and clamp numerics on every load.
   if (normalized.textMotion !== undefined) {
     normalized.textMotion = sanitizeTextMotion(normalized.textMotion)
+  }
+
+  // Text counter: coerce malformed fields (hand-edited / agent-written JSON).
+  if (normalized.textCounter !== undefined) {
+    normalized.textCounter = sanitizeTextCounter(normalized.textCounter)
   }
 
   // Ensure speed is valid (default 1.0, range 0.1-10.0)
