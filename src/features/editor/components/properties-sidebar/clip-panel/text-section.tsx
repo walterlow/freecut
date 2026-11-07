@@ -16,6 +16,7 @@ import { TextAlignControls } from './text-align-controls'
 import { TextColorControls } from './text-color-controls'
 import { TextBoxControls } from './text-box-controls'
 import { TextEffectsControls } from './text-effects-controls'
+import { TextCounterSection } from './text-counter-controls'
 
 interface TextSectionProps {
   items: TimelineItem[]
@@ -301,6 +302,8 @@ function TextSectionComposer({ items, canvas, slots }: TextSectionComposerProps)
           />
         </PropertySection>
       )}
+
+      {showContentSection && <TextCounterSection textItems={textItems} />}
 
       {showEffectSection && (
         <PropertySection title={t('editor.textSection.style')} icon={Palette} defaultOpen={true}>

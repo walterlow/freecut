@@ -3,7 +3,7 @@ import type { AudioEqSettings } from './audio'
 import type { Transition } from './transition'
 import type { CropSettings } from './transform'
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids'
-import type { TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
+import type { TextCounter, TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
 import type { TextMotionSpec } from './text-motion'
 import type { MaskVertex } from './masks'
 import type { ShapeStyleFields } from './timeline'
@@ -133,6 +133,8 @@ export interface ProjectTimeline {
       textLayoutDrafts?: TextLayoutDrafts
       /** Per-character/word/line animation (see ./text-motion). */
       textMotion?: TextMotionSpec
+      /** Animated number counter driving the rendered text (see ./text). */
+      textCounter?: TextCounter
       shapeType?:
         | 'rectangle'
         | 'circle'

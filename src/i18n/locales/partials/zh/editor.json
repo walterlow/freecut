@@ -783,6 +783,25 @@
         "swing": "摇摆"
       }
     },
+    "textCounter": {
+      "sectionTitle": "计数器",
+      "enable": "计数器",
+      "hint": "将文本替换为在整个片段中计数的数字。添加数值关键帧可自定义时间。",
+      "from": "起始",
+      "to": "结束",
+      "decimals": "小数位",
+      "prefix": "前缀",
+      "suffix": "后缀",
+      "separator": "千位分隔",
+      "easing": "缓动",
+      "value": "数值",
+      "easings": {
+        "linear": "线性",
+        "ease-in": "缓入",
+        "ease-out": "缓出",
+        "ease-in-out": "缓入缓出"
+      }
+    },
     "tts": {
       "seek": "定位",
       "dialogTitle": "从文本生成音频",

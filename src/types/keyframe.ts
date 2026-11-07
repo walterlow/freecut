@@ -29,6 +29,7 @@ export type BuiltInAnimatableProperty =
   | 'textShadowOffsetY'
   | 'textShadowBlur'
   | 'strokeWidth'
+  | 'counterValue'
   | 'trimPathStart'
   | 'trimPathEnd'
   | 'trimPathOffset'
@@ -483,6 +484,7 @@ const BUILT_IN_PROPERTY_LABELS: Record<BuiltInAnimatableProperty, string> = {
   textShadowOffsetY: 'Shadow Y',
   textShadowBlur: 'Shadow Blur',
   strokeWidth: 'Stroke Width',
+  counterValue: 'Counter Value',
   trimPathStart: 'Trim Paths Start',
   trimPathEnd: 'Trim Paths End',
   trimPathOffset: 'Trim Paths Offset',

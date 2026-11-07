@@ -783,6 +783,25 @@
         "swing": "스윙"
       }
     },
+    "textCounter": {
+      "sectionTitle": "카운터",
+      "enable": "카운터",
+      "hint": "텍스트를 클립 전체에 걸쳐 카운트되는 숫자로 바꿉니다. 사용자 지정 타이밍은 값 키프레임을 추가하세요.",
+      "from": "시작",
+      "to": "끝",
+      "decimals": "소수 자릿수",
+      "prefix": "접두사",
+      "suffix": "접미사",
+      "separator": "천 단위 구분",
+      "easing": "이징",
+      "value": "값",
+      "easings": {
+        "linear": "선형",
+        "ease-in": "이즈 인",
+        "ease-out": "이즈 아웃",
+        "ease-in-out": "이즈 인아웃"
+      }
+    },
     "tts": {
       "seek": "탐색",
       "dialogTitle": "텍스트에서 오디오 생성",

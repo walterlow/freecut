@@ -783,6 +783,25 @@
         "swing": "Schwingen"
       }
     },
+    "textCounter": {
+      "sectionTitle": "Zähler",
+      "enable": "Zähler",
+      "hint": "Ersetzt den Text durch eine Zahl, die über den Clip hochzählt. Wert-Keyframes für eigenes Timing hinzufügen.",
+      "from": "Von",
+      "to": "Bis",
+      "decimals": "Dezimalst.",
+      "prefix": "Präfix",
+      "suffix": "Suffix",
+      "separator": "1.000 Trenn.",
+      "easing": "Easing",
+      "value": "Wert",
+      "easings": {
+        "linear": "Linear",
+        "ease-in": "Ease In",
+        "ease-out": "Ease Out",
+        "ease-in-out": "Ease In-Out"
+      }
+    },
     "tts": {
       "seek": "Suchen",
       "dialogTitle": "Audio aus Text generieren",

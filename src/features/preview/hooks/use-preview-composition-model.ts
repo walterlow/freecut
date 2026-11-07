@@ -145,6 +145,7 @@ export function mergeLiveItemPresentation(
     spanLayout: liveItem.spanLayout,
     textStyleScale: liveItem.textStyleScale,
     textMotion: liveItem.textMotion,
+    textCounter: liveItem.textCounter,
     color: liveItem.color,
     fontSize: liveItem.fontSize,
     fontFamily: liveItem.fontFamily,

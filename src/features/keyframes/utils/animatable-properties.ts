@@ -54,7 +54,14 @@ export function getAnimatablePropertiesForItem(item: TimelineItem): AnimatablePr
         ...effectProperties,
       ]
     case 'text':
-      return [...VISUAL_ANIMATABLE_PROPERTIES, ...TEXT_ANIMATABLE_PROPERTIES, ...effectProperties]
+      return [
+        ...VISUAL_ANIMATABLE_PROPERTIES,
+        // `counterValue` only means something while the clip's counter is on.
+        ...TEXT_ANIMATABLE_PROPERTIES.filter(
+          (property) => property !== 'counterValue' || item.textCounter?.enabled === true,
+        ),
+        ...effectProperties,
+      ]
     case 'shape':
       return [
         ...VISUAL_ANIMATABLE_PROPERTIES,

@@ -152,7 +152,8 @@
       "textShadowOffsetX": "Shadow X",
       "textShadowOffsetY": "Shadow Y",
       "textShadowBlur": "Shadow Blur",
-      "strokeWidth": "Stroke Width"
+      "strokeWidth": "Stroke Width",
+      "counterValue": "Counter Value"
     }
   }
 }

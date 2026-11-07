@@ -783,6 +783,25 @@
         "swing": "Balançar"
       }
     },
+    "textCounter": {
+      "sectionTitle": "Contador",
+      "enable": "Contador",
+      "hint": "Substitui o texto por um número que conta ao longo do clipe. Adicione keyframes de Valor para um timing personalizado.",
+      "from": "De",
+      "to": "Até",
+      "decimals": "Decimais",
+      "prefix": "Prefixo",
+      "suffix": "Sufixo",
+      "separator": "Sep. 1,000",
+      "easing": "Suavização",
+      "value": "Valor",
+      "easings": {
+        "linear": "Linear",
+        "ease-in": "Entrada suave",
+        "ease-out": "Saída suave",
+        "ease-in-out": "Entrada/saída suave"
+      }
+    },
     "tts": {
       "seek": "Buscar",
       "dialogTitle": "Gerar áudio a partir de texto",

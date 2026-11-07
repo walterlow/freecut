@@ -142,7 +142,8 @@
       "textShadowOffsetX": "阴影 X",
       "textShadowOffsetY": "阴影 Y",
       "textShadowBlur": "阴影模糊",
-      "strokeWidth": "描边宽度"
+      "strokeWidth": "描边宽度",
+      "counterValue": "计数器数值"
     }
   }
 }

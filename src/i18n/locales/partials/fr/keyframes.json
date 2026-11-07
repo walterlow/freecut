@@ -142,7 +142,8 @@
       "textShadowOffsetX": "Ombre X",
       "textShadowOffsetY": "Ombre Y",
       "textShadowBlur": "Flou de l’ombre",
-      "strokeWidth": "Largeur du contour"
+      "strokeWidth": "Largeur du contour",
+      "counterValue": "Valeur du compteur"
     }
   }
 }

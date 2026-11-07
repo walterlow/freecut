@@ -43,6 +43,11 @@ const PROPERTY_GROUP_DEFINITIONS: Array<{
     properties: ['textShadowOffsetX', 'textShadowOffsetY', 'textShadowBlur', 'strokeWidth'],
   },
   {
+    id: 'textCounter',
+    label: 'Text Counter',
+    properties: ['counterValue'],
+  },
+  {
     id: 'crop',
     label: 'Crop',
     properties: ['cropLeft', 'cropRight', 'cropTop', 'cropBottom', 'cropSoftness'],

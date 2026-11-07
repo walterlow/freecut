@@ -783,6 +783,25 @@
         "swing": "Swing"
       }
     },
+    "textCounter": {
+      "sectionTitle": "Counter",
+      "enable": "Counter",
+      "hint": "Replaces the text with a number that counts across the clip. Add Value keyframes for custom timing.",
+      "from": "From",
+      "to": "To",
+      "decimals": "Decimals",
+      "prefix": "Prefix",
+      "suffix": "Suffix",
+      "separator": "1,000 sep.",
+      "easing": "Easing",
+      "value": "Value",
+      "easings": {
+        "linear": "Linear",
+        "ease-in": "Ease In",
+        "ease-out": "Ease Out",
+        "ease-in-out": "Ease In-Out"
+      }
+    },
     "tts": {
       "seek": "Seek",
       "dialogTitle": "Generate audio from text",

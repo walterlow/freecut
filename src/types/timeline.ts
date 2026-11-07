@@ -5,7 +5,7 @@ import type { BlendMode } from './blend-modes'
 import type { AudioEqSettings } from './audio'
 import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids'
 import type { TextMotionSpec } from './text-motion'
-import type { TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
+import type { TextCounter, TextLayoutDrafts, TextSpan, TextStyleFields } from './text'
 import type { CompositionControlOverrides } from './composition-controls'
 
 export interface TimelineItemCornerPin {
@@ -208,7 +208,7 @@ export type AudioItem = BaseTimelineItem & {
   offset?: number // Trim offset in source audio
 }
 
-export type { TextLayoutDrafts, TextSingleLayoutDraft, TextSpan } from './text'
+export type { TextCounter, TextLayoutDrafts, TextSingleLayoutDraft, TextSpan } from './text'
 
 export type TextItem = BaseTimelineItem &
   TextStyleFields & {
@@ -228,6 +228,8 @@ export type TextItem = BaseTimelineItem &
     textStyleScale?: number
     /** Per-character/word/line animation (see src/types/text-motion.ts). */
     textMotion?: TextMotionSpec
+    /** Animated number counter that drives the rendered text (see src/types/text.ts). */
+    textCounter?: TextCounter
     textRole?: 'caption'
     captionSource?: GeneratedCaptionSource
     color: string // Text color (hex or oklch)
